@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e
+systemctl mask systemd-firstboot.service sshd-keygen.service
+# ifupdown2 owns networking (vmbr0); networkd is socket-activatable, so mask it.
+systemctl mask systemd-networkd.service systemd-networkd.socket
+# The enterprise repositories need a subscription (apt update fails with 401 otherwise):
+# keep them, disabled, as Proxmox's UI does, so they can be re-enabled there.
+/usr/lib/hitkit/pve-repos

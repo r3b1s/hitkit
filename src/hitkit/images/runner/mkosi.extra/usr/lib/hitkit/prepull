@@ -1,0 +1,15 @@
+#!/bin/sh
+# Pull every job image the runner config references, plus any listed in the
+# hitkit.runner.prepull credential, so ephemeral VMs start with them cached.
+set -eu
+images=$( (sed -n 's|.*docker://\(.*\)$|\1|p' /etc/forgejo-runner/config.yml
+           grep -v '^\s*$' "$CREDENTIALS_DIRECTORY/hitkit.runner.prepull" 2>/dev/null || true) | sort -u)
+for image in $images; do
+    echo "prepull: $image" | tee /dev/ttyS0
+    docker pull --quiet "$image"
+done
+sync
+# Fail loudly if the images did not land on the data disk (that is what gets kept).
+du -sm /srv/data/containerd | tee /dev/ttyS0
+[ "$(du -sm /srv/data/containerd | cut -f1)" -gt 100 ] || { echo "HITKIT-PREPULL-EMPTY" > /dev/ttyS0; exit 1; }
+echo HITKIT-PREPULL-DONE > /dev/ttyS0

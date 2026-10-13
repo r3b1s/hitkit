@@ -1,0 +1,77 @@
+#!/bin/sh
+# Render Forgejo's configuration from credentials. Runs every boot (design §9.3).
+set -eu
+c="$CREDENTIALS_DIRECTORY"
+data=/srv/data/forgejo
+install -d -o forgejo -g forgejo -m 0750 "$data" "$data/data" "$data/repositories" "$data/custom" "$data/log"
+install -d -o root -g forgejo -m 0750 /etc/forgejo
+install -o root -g forgejo -m 0640 /etc/hitkit/tls/server.crt /etc/forgejo/tls.crt
+install -o root -g forgejo -m 0640 /etc/hitkit/tls/server.key /etc/forgejo/tls.key
+# Pinned host key for git over SSH (Forgejo's built-in server on :2222).
+install -d -o forgejo -g forgejo -m 0700 /etc/forgejo/ssh
+install -o forgejo -g forgejo -m 0600 "$c/hitkit.fj.git-host-key" /etc/forgejo/ssh/ed25519
+umask 027
+cat > /etc/forgejo/app.ini.new <<INI
+APP_NAME = hitkit forge
+RUN_USER = forgejo
+RUN_MODE = prod
+WORK_PATH = $data
+
+[server]
+PROTOCOL = https
+DOMAIN = forgejo.hitkit.internal
+ROOT_URL = https://forgejo.hitkit.internal/
+HTTP_ADDR = 0.0.0.0
+HTTP_PORT = 443
+CERT_FILE = /etc/forgejo/tls.crt
+KEY_FILE = /etc/forgejo/tls.key
+DISABLE_SSH = false
+START_SSH_SERVER = true
+BUILTIN_SSH_SERVER_USER = git
+SSH_DOMAIN = forgejo.hitkit.internal
+SSH_PORT = 2222
+SSH_LISTEN_PORT = 2222
+SSH_SERVER_HOST_KEYS = /etc/forgejo/ssh/ed25519
+LFS_START_SERVER = true
+LFS_JWT_SECRET = $(cat "$c/hitkit.fj.lfs-jwt-secret")
+OFFLINE_MODE = true
+
+[database]
+DB_TYPE = sqlite3
+PATH = $data/data/forgejo.db
+
+[repository]
+ROOT = $data/repositories
+DEFAULT_BRANCH = main
+
+[security]
+INSTALL_LOCK = true
+SECRET_KEY = $(cat "$c/hitkit.fj.secret-key")
+INTERNAL_TOKEN = $(cat "$c/hitkit.fj.internal-token")
+
+[oauth2]
+JWT_SECRET = $(cat "$c/hitkit.fj.jwt-secret")
+
+[service]
+DISABLE_REGISTRATION = true
+
+[actions]
+ENABLED = true
+
+[packages]
+ENABLED = true
+
+[migrations]
+# Allow mirrors/migrations to forges on the LAN (e.g. a self-hosted Gitea).
+# Guests already have NAT egress to the LAN, so this grants nothing new.
+ALLOW_LOCALNETWORKS = true
+
+[cron.update_checker]
+ENABLED = false
+
+[log]
+MODE = console
+LEVEL = Info
+INI
+chown root:forgejo /etc/forgejo/app.ini.new
+mv /etc/forgejo/app.ini.new /etc/forgejo/app.ini

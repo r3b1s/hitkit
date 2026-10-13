@@ -1,0 +1,13 @@
+version: 0.1
+log:
+  level: info
+storage:
+  filesystem:
+    rootdirectory: /srv/data/registry/dockerhub
+  delete:
+    enabled: true
+http:
+  addr: 127.0.0.1:5100
+proxy:
+  remoteurl: https://registry-1.docker.io
+  ttl: 168h

@@ -1,0 +1,13 @@
+# Proxmox VE 9 as a VM on your workstation, for testing Ansible/Terraform/API
+# automation against a near-default install. Nested KVM lets it run real VMs.
+name = "proxmox"
+description = "Proxmox VE 9 (nested KVM) with API token, web UI on https://proxmox.hitkit.internal:8006"
+version = 1
+
+[[machine]]
+name = "proxmox"
+role = "proxmox"
+cpus = 4
+memory_mib = 8192
+data_disk_gib = 100
+stateful_os = true  # Proxmox keeps VM definitions in its config database on the OS disk

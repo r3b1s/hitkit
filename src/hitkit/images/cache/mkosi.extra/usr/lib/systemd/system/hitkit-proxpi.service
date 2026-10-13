@@ -1,0 +1,14 @@
+[Unit]
+Description=Pull-through PyPI cache (proxpi)
+After=network-online.target hitkit-provision.service
+Wants=network-online.target
+RequiresMountsFor=/srv/data
+
+[Service]
+User=hitkit-cache
+Environment=PROXPI_CACHE_DIR=/srv/data/proxpi
+ExecStart=/opt/proxpi/bin/gunicorn --bind 127.0.0.1:5102 --workers 2 proxpi.server:app
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,9 @@
+# Pinned third-party artifacts (design §8.1). hitkit downloads and verifies
+# each one, then places it in the image at `dest`.
+[[artifact]]
+name = "forgejo"
+version = "16.0.5"
+url = "https://codeberg.org/forgejo/forgejo/releases/download/v16.0.5/forgejo-16.0.5-linux-amd64"
+sha256 = "2c548bf1bfa09a441a3a674b1dd4959d77576816ad50534c23496908a3ea5a19"
+dest = "/usr/local/bin/forgejo"
+mode = 0o755

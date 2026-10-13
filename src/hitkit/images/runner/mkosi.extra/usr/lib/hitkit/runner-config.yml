@@ -1,0 +1,31 @@
+# forgejo-runner configuration template; provision.d/50-runner completes it
+# (a server connection for persistent runners, the `ephemeral` label for job VMs).
+log:
+  level: info
+runner:
+  capacity: 2
+  timeout: 3h
+  # Every job container trusts the hitkit CA, additively and only where needed
+  # (design §9.4): Node gets an extra CA; git trusts it for the forge URL only.
+  envs:
+    NODE_EXTRA_CA_CERTS: /etc/hitkit/ca.crt
+    GIT_CONFIG_COUNT: "1"
+    GIT_CONFIG_KEY_0: http.https://forgejo.hitkit.internal/.sslCAInfo
+    GIT_CONFIG_VALUE_0: /etc/hitkit/ca.crt
+    # A complete bundle (public roots + hitkit CA) for tools that read one
+    # file: curl/OpenSSL, pip, requests. Nothing loses public trust.
+    SSL_CERT_FILE: /etc/hitkit/ca-bundle.crt
+    PIP_CERT: /etc/hitkit/ca-bundle.crt
+    REQUESTS_CA_BUNDLE: /etc/hitkit/ca-bundle.crt
+  labels:
+    - ubuntu-latest:docker://ghcr.io/catthehacker/ubuntu:act-24.04@sha256:62d572b92f9f32d3427b6d220ad1f9dca9c7b6ffad37d295425037dbff78abaf
+    - ubuntu-24.04:docker://ghcr.io/catthehacker/ubuntu:act-24.04@sha256:62d572b92f9f32d3427b6d220ad1f9dca9c7b6ffad37d295425037dbff78abaf
+    # @EPHEMERAL@ ephemeral:docker://ghcr.io/catthehacker/ubuntu:act-24.04@sha256:62d572b92f9f32d3427b6d220ad1f9dca9c7b6ffad37d295425037dbff78abaf
+cache:
+  enabled: true
+  dir: /srv/data/runner/cache
+container:
+  options: -v /etc/hitkit/ca.crt:/etc/hitkit/ca.crt:ro -v /etc/ssl/certs/ca-certificates.crt:/etc/hitkit/ca-bundle.crt:ro
+  valid_volumes:
+    - /etc/hitkit/ca.crt
+    - /etc/ssl/certs/ca-certificates.crt

@@ -1,0 +1,24 @@
+# TLS for every cache with the machine's hitkit CA leaf (no ACME).
+{
+	auto_https off
+	admin off
+}
+(hitkit_tls) {
+	tls /etc/hitkit-cache/tls.crt /etc/hitkit-cache/tls.key
+}
+https://cache.hitkit.internal:5000 {
+	import hitkit_tls
+	reverse_proxy 127.0.0.1:5100
+}
+https://cache.hitkit.internal:5001 {
+	import hitkit_tls
+	reverse_proxy 127.0.0.1:5101
+}
+https://cache.hitkit.internal:5002 {
+	import hitkit_tls
+	reverse_proxy 127.0.0.1:5102
+}
+https://cache.hitkit.internal:5003 {
+	import hitkit_tls
+	reverse_proxy 127.0.0.1:5103
+}

@@ -1,0 +1,20 @@
+[Unit]
+Description=Forgejo Actions runner
+After=docker.service hitkit-provision.service network-online.target
+Wants=docker.service network-online.target
+# Job VMs and template builds run their own one-shot units instead.
+ConditionPathExists=!/run/hitkit/ephemeral
+ConditionPathExists=!/run/hitkit/prepull
+
+[Service]
+User=runner
+Group=runner
+WorkingDirectory=/srv/data/runner
+# The runner reads its token straight from this credential (token_url).
+LoadCredential=hitkit.runner.token
+ExecStart=/usr/local/bin/forgejo-runner daemon --config /etc/forgejo-runner/config.yml
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

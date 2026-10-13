@@ -1,0 +1,5 @@
+#!/bin/sh
+set -e
+systemctl mask systemd-firstboot.service 'sshd-keygen@.service' NetworkManager.service 2>/dev/null || true
+ln -sf ../run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
+touch /.autorelabel

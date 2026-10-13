@@ -1,0 +1,16 @@
+[Unit]
+Description=Install Ludus on first boot (hitkit)
+Wants=network-online.target
+After=network-online.target pve-cluster.service pveproxy.service hitkit-provision.service
+ConditionPathExists=!/opt/ludus/install/.stage-3-complete
+
+[Service]
+Type=oneshot
+ImportCredential=hitkit.*
+ExecStart=/usr/lib/hitkit/ludus-install
+StandardOutput=journal+console
+StandardError=journal+console
+TimeoutStartSec=2h
+
+[Install]
+WantedBy=multi-user.target

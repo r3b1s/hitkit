@@ -1,0 +1,13 @@
+version: 0.1
+log:
+  level: info
+storage:
+  filesystem:
+    rootdirectory: /srv/data/registry/ghcr
+  delete:
+    enabled: true
+http:
+  addr: 127.0.0.1:5101
+proxy:
+  remoteurl: https://ghcr.io
+  ttl: 168h

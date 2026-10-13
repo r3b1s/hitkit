@@ -1,0 +1,13 @@
+# Dogfooding on fedora: a host of that distribution for developing and testing
+# hitkit there, including running a nested hitkit (subnet 10.78.0.0/24).
+name = "hitkit-dev-fedora"
+description = "fedora VM for developing and testing hitkit on fedora (nested virtualization)"
+version = 1
+hooks_from = "hitkit-dev"
+
+[[machine]]
+name = "dev-fedora"
+role = "hitkit-dev-fedora"
+cpus = 4
+memory_mib = 8192
+data_disk_gib = 80

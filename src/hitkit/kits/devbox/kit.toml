@@ -1,0 +1,12 @@
+# A plain Debian 13 machine with SSH: the base every other kit builds on,
+# and the seed of the roadmap's agent devbox.
+name = "devbox"
+description = "Plain Debian 13 VM with SSH and a persistent data disk at /srv/data"
+version = 1
+
+[[machine]]
+name = "devbox"
+role = "base"
+cpus = 2
+memory_mib = 2048
+data_disk_gib = 20

@@ -1,0 +1,18 @@
+# forgejo-runner configuration for an Arch job VM (provision.d/50-runner completes it).
+# Jobs run directly on this single-use VM (host mode), not in a container.
+log:
+  level: info
+runner:
+  capacity: 1
+  timeout: 3h
+  envs:
+    # The hitkit CA is in the system trust store (common provisioning); Node keeps
+    # its own bundle, so it is told about the CA explicitly.
+    NODE_EXTRA_CA_CERTS: /etc/hitkit/ca.crt
+  labels:
+    - arch:host
+host:
+  workdir_parent: /srv/data/runner/work
+cache:
+  enabled: true
+  dir: /srv/data/runner/cache

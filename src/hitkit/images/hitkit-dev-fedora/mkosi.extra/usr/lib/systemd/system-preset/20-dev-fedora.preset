@@ -1,0 +1,5 @@
+enable firewalld.service
+enable virtqemud.socket
+enable virtnetworkd.socket
+enable virtlogd.socket
+enable virtproxyd.socket

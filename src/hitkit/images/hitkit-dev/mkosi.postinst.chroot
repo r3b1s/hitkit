@@ -1,0 +1,7 @@
+#!/bin/sh
+set -e
+# Units are enabled via presets (see */usr/lib/systemd/system-preset/).
+# A hitkit machine must never wait for console input, and has exactly one
+# (credential-provided) SSH host key.
+systemctl mask systemd-firstboot.service sshdgenkeys.service
+ln -sf ../run/systemd/resolve/stub-resolv.conf /etc/resolv.conf

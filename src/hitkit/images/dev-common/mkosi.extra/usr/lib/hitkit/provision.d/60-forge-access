@@ -1,0 +1,18 @@
+#!/bin/sh
+# Forge access for the dev user: the VM's own least-privilege Forgejo account.
+# git uses the token only for the forge URL (credential.<url>.helper).
+set -eu
+c="$CREDENTIALS_DIRECTORY"
+home=/srv/data/dev
+cfg="$home/.gitconfig"
+if [ ! -f "$c/hitkit.dev.forge-token" ]; then
+    rm -f "$home/.git-credentials"
+    exit 0
+fi
+umask 077
+printf 'https://%s:%s@forgejo.hitkit.internal\n' "$(cat "$c/hitkit.dev.forge-user")" "$(cat "$c/hitkit.dev.forge-token")" \
+    > "$home/.git-credentials"
+git config --file "$cfg" credential.https://forgejo.hitkit.internal.helper store
+git config --file "$cfg" user.name >/dev/null || git config --file "$cfg" user.name "hitkit-dev"
+git config --file "$cfg" user.email >/dev/null || git config --file "$cfg" user.email "hitkit-dev@hitkit.internal"
+chown dev:dev "$home/.git-credentials" "$cfg"

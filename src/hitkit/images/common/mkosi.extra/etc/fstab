@@ -1,0 +1,2 @@
+# The persistent data disk (design §8.2). systemd formats it on first boot.
+/dev/disk/by-id/virtio-hitkit-data  /srv/data  ext4  defaults,x-systemd.makefs,x-systemd.growfs,x-systemd.device-timeout=30s  0  2

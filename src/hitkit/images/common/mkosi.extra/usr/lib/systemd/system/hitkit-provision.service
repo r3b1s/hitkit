@@ -1,0 +1,18 @@
+[Unit]
+Description=Apply hitkit credentials (network, SSH, TLS)
+DefaultDependencies=no
+After=local-fs.target
+# Network config comes from credentials, so provision before any network bring-up
+# (ifupdown2's networking.service has DefaultDependencies=no).
+Before=network-pre.target systemd-networkd.service networking.service ssh.service sshd.service sysinit.target
+Wants=network-pre.target
+ConditionPathExists=/usr/lib/hitkit/provision
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ImportCredential=hitkit.*
+ExecStart=/usr/lib/hitkit/provision
+
+[Install]
+WantedBy=sysinit.target

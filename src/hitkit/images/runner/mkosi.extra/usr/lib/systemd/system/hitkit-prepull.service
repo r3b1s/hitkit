@@ -1,0 +1,15 @@
+[Unit]
+Description=Pull job images onto the data disk (warm template build), then power off
+After=docker.service hitkit-provision.service network-online.target
+Wants=docker.service network-online.target
+ConditionPathExists=/run/hitkit/prepull
+SuccessAction=poweroff
+FailureAction=poweroff
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/hitkit/prepull
+TimeoutStartSec=1h
+
+[Install]
+WantedBy=multi-user.target

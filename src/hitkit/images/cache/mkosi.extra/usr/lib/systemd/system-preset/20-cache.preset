@@ -1,0 +1,8 @@
+enable hitkit-registry-dockerhub.service
+enable hitkit-registry-ghcr.service
+enable hitkit-proxpi.service
+enable hitkit-verdaccio.service
+enable caddy.service
+enable apt-cacher-ng.service
+# Debian's alternative unit for API-configured Caddy; we use caddy.service.
+disable caddy-api.service

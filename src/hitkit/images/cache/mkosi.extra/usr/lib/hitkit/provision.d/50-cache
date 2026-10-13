@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+for d in registry/dockerhub registry/ghcr proxpi verdaccio/storage; do
+    install -d -o hitkit-cache -g hitkit-cache -m 0750 "/srv/data/$d"
+done
+install -d -o apt-cacher-ng -g apt-cacher-ng -m 0750 /srv/data/apt-cacher-ng
+install -o root -g caddy -m 0640 /etc/hitkit/tls/server.crt /etc/hitkit-cache/tls.crt
+install -o root -g caddy -m 0640 /etc/hitkit/tls/server.key /etc/hitkit-cache/tls.key

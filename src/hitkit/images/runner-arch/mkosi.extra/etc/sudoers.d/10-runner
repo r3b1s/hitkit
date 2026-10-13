@@ -1,0 +1,3 @@
+# Jobs run as `runner` and may install packages (sudo pacman -S ...): the VM is
+# single-use, destroyed after the job.
+runner ALL=(ALL:ALL) NOPASSWD: ALL

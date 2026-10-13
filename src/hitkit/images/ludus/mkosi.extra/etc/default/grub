@@ -1,0 +1,5 @@
+# hitkit images boot with systemd-boot (a unified kernel image); GRUB is not installed.
+# This file exists only because Ludus's Ansible (the lae.proxmox role) edits it
+# unconditionally and fails when it is missing. Nothing reads it.
+GRUB_CMDLINE_LINUX_DEFAULT="quiet"
+GRUB_CMDLINE_LINUX=""

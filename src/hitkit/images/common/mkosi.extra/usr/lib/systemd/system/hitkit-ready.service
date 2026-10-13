@@ -1,0 +1,12 @@
+[Unit]
+Description=Report hitkit readiness on the serial console
+After=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ImportCredential=hitkit.*
+ExecStart=/usr/lib/hitkit/ready
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,9 @@
+#!/bin/sh
+# pacman verifies packages against a local keyring that must be initialised per machine
+# (its private key is the machine's own, so it is never baked into the image). This is
+# what Arch's install media does with pacman-init.service. Once per machine.
+set -eu
+if [ ! -f /etc/pacman.d/gnupg/pubring.gpg ] && [ ! -f /etc/pacman.d/gnupg/pubring.kbx ]; then
+    pacman-key --init >/dev/null 2>&1
+    pacman-key --populate archlinux >/dev/null 2>&1
+fi

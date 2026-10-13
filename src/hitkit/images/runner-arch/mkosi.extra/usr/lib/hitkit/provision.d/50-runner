@@ -1,0 +1,23 @@
+#!/bin/sh
+# Arch job VM: the `runner` user (fixed UID, docker access, passwordless sudo via
+# sudoers.d/10-runner), its work area on the data disk, Docker on the data disk, the
+# pull-through caches when the cache kit exists, and the one job this VM is for.
+set -eu
+c="$CREDENTIALS_DIRECTORY"
+if ! id runner >/dev/null 2>&1; then
+    useradd --uid 1001 --user-group --create-home --shell /bin/bash --groups docker runner
+fi
+install -d -o runner -g runner -m 0750 /srv/data/runner /srv/data/runner/work /srv/data/runner/cache
+install -d -m 0711 /srv/data/docker
+install -d -m 0755 /etc/forgejo-runner /etc/docker /run/hitkit
+cfg=/etc/forgejo-runner/config.yml
+cp /usr/lib/hitkit/runner-config.yml "$cfg"
+if [ -f "$c/hitkit.runner.cache" ]; then
+    cache=$(cat "$c/hitkit.runner.cache")
+    printf '{\n  "data-root": "/srv/data/docker",\n  "registry-mirrors": ["%s:5000"]\n}\n' "$cache" > /etc/docker/daemon.json
+    sed -i "/^  envs:/a\\    PIP_INDEX_URL: $cache:5002/index/\\n    UV_DEFAULT_INDEX: $cache:5002/index/\\n    NPM_CONFIG_REGISTRY: $cache:5003/" "$cfg"
+else
+    printf '{\n  "data-root": "/srv/data/docker"\n}\n' > /etc/docker/daemon.json
+fi
+[ -f "$c/hitkit.runner.handle" ] && touch /run/hitkit/ephemeral
+exit 0

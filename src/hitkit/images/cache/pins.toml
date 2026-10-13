@@ -1,0 +1,8 @@
+[[artifact]]
+name = "registry"
+version = "3.1.2"
+url = "https://github.com/distribution/distribution/releases/download/v3.1.2/registry_3.1.2_linux_amd64.tar.gz"
+sha256 = "40df2224d410f72ae425c3371873b078bbdbda3b8b612be9571f0e6751f3acc8"
+member = "registry"
+dest = "/usr/local/bin/registry"
+mode = 0o755

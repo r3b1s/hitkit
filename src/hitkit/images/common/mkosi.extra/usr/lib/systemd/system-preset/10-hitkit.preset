@@ -1,0 +1,9 @@
+# mkosi applies presets after postinst; Arch's default policy is "disable *",
+# so everything hitkit relies on is enabled here rather than in postinst.
+enable hitkit-provision.service
+enable hitkit-ready.service
+enable systemd-networkd.service
+enable systemd-resolved.service
+enable ssh.service
+enable sshd.service
+enable qemu-guest-agent.service

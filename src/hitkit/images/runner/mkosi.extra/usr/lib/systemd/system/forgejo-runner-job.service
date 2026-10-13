@@ -1,0 +1,21 @@
+[Unit]
+Description=Run exactly one Forgejo Actions job, then power off (ephemeral VM)
+After=docker.service hitkit-provision.service network-online.target
+Wants=docker.service network-online.target
+ConditionPathExists=/run/hitkit/ephemeral
+SuccessAction=poweroff
+FailureAction=poweroff
+
+[Service]
+Type=oneshot
+User=runner
+Group=runner
+WorkingDirectory=/srv/data/runner
+LoadCredential=hitkit.runner.token
+LoadCredential=hitkit.runner.uuid
+LoadCredential=hitkit.runner.handle
+ExecStart=/bin/sh -c 'exec /usr/local/bin/forgejo-runner one-job --config /etc/forgejo-runner/config.yml --url https://forgejo.hitkit.internal/ --uuid "$(cat "$CREDENTIALS_DIRECTORY/hitkit.runner.uuid")" --token-url "file:$CREDENTIALS_DIRECTORY/hitkit.runner.token" --handle "$(cat "$CREDENTIALS_DIRECTORY/hitkit.runner.handle")"'
+TimeoutStartSec=4h
+
+[Install]
+WantedBy=multi-user.target

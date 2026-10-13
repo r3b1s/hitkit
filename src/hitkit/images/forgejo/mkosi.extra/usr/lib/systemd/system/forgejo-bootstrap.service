@@ -1,0 +1,14 @@
+[Unit]
+Description=Migrate the Forgejo database and ensure the hitkit admin account
+After=hitkit-provision.service
+Requires=hitkit-provision.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=forgejo
+Group=forgejo
+WorkingDirectory=/srv/data/forgejo
+Environment=HOME=/srv/data/forgejo FORGEJO_WORK_DIR=/srv/data/forgejo
+LoadCredential=hitkit.fj.admin-password
+ExecStart=/usr/lib/hitkit/forgejo-bootstrap

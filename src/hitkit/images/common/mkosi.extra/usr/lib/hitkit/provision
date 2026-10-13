@@ -1,0 +1,40 @@
+#!/bin/sh
+# Turn hitkit credentials into configuration. Runs every boot and is idempotent,
+# so re-issued credentials (e.g. a renewed certificate) apply on restart.
+# Shared by every image distribution (design §8.5).
+set -eu
+creds="${CREDENTIALS_DIRECTORY:?no credentials imported}"
+
+install_cred() {  # name dest mode
+    [ -f "$creds/$1" ] || return 0
+    install -D -m "$3" "$creds/$1" "$2"
+}
+
+# Static network config lives in /run: it is re-derived from the credential every boot.
+install_cred hitkit.network /run/systemd/network/10-hitkit.network 0644
+
+if [ -f "$creds/hitkit.ssh-host-key" ]; then
+    install_cred hitkit.ssh-host-key /etc/ssh/ssh_host_ed25519_key 0600
+    ssh-keygen -y -f /etc/ssh/ssh_host_ed25519_key > /etc/ssh/ssh_host_ed25519_key.pub
+fi
+install_cred hitkit.authorized-keys /root/.ssh/authorized_keys 0600
+chmod 0700 /root/.ssh 2>/dev/null || true
+
+install_cred hitkit.tls.crt /etc/hitkit/tls/server.crt 0644
+install_cred hitkit.tls.key /etc/hitkit/tls/server.key 0600
+if [ -f "$creds/hitkit.ca.crt" ]; then
+    install -D -m 0644 "$creds/hitkit.ca.crt" /etc/hitkit/ca.crt   # stable path for mounts
+    if command -v update-ca-certificates >/dev/null; then      # Debian
+        install -D -m 0644 "$creds/hitkit.ca.crt" /usr/local/share/ca-certificates/hitkit.crt
+        update-ca-certificates >/dev/null
+    else                                                       # Arch (p11-kit)
+        install -D -m 0644 "$creds/hitkit.ca.crt" /etc/ca-certificates/trust-source/anchors/hitkit.crt
+        update-ca-trust
+    fi
+fi
+
+# Role-specific steps.
+for hook in /usr/lib/hitkit/provision.d/*; do
+    [ -x "$hook" ] && "$hook"
+done
+exit 0

@@ -1,0 +1,12 @@
+# Pull-through caches: Docker Hub and ghcr.io registries, PyPI, npm and apt,
+# so CI and image builds are fast and keep working when upstreams are slow.
+name = "cache"
+description = "Pull-through caches: Docker Hub, ghcr.io, PyPI, npm and apt"
+version = 1
+
+[[machine]]
+name = "cache"
+role = "cache"
+cpus = 2
+memory_mib = 2048
+data_disk_gib = 100

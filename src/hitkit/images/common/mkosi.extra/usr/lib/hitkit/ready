@@ -1,0 +1,23 @@
+#!/bin/sh
+# Run each readiness gate with retries and report the outcome on the serial
+# console, where `hitkit up` is watching (design §8.6).
+set -u
+console=/dev/ttyS0
+timeout=${HITKIT_READY_TIMEOUT:-120}
+
+# Leading newline: the marker must not end up glued to a getty prompt.
+report() { printf '\n%s\n' "$*" > "$console"; echo "$*"; }
+
+for gate in /usr/lib/hitkit/ready.d/*; do
+    [ -x "$gate" ] || continue
+    name=$(basename "$gate" | sed 's/^[0-9]*-//; s/\.sh$//')
+    deadline=$(( $(date +%s) + timeout ))
+    until detail=$("$gate" 2>&1); do
+        if [ "$(date +%s)" -ge "$deadline" ]; then
+            report "HITKIT-FAILED gate=$name detail=$(echo "$detail" | tr '\n' ' ' | cut -c1-300)"
+            exit 1
+        fi
+        sleep 1
+    done
+done
+report "HITKIT-READY"

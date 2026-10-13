@@ -1,0 +1,39 @@
+#!/bin/sh
+# Render the hitkit static address as Proxmox expects it: a vmbr0 bridge over
+# the NIC (guests attach to vmbr0), plus /etc/hosts and /etc/resolv.conf.
+set -eu
+c="$CREDENTIALS_DIRECTORY"
+get() { sed -n "s/^$1=//p" "$c/hitkit.network"; }
+addr=$(get Address); gw=$(get Gateway); dns=$(get DNS); domain=$(get Domains)
+name=$(cat /proc/sys/kernel/hostname)  # systemd set it from the system.hostname credential
+nic=enp1s0
+# Blocks other tools manage in this file (Ludus's NAT bridge, Ansible blockinfile) survive.
+managed=$(awk '/^# .* BEGIN$/{k=1} k{print} /^# .* END$/{k=0}' /etc/network/interfaces 2>/dev/null || true)
+cat > /etc/network/interfaces <<IF
+auto lo
+iface lo inet loopback
+
+iface $nic inet manual
+
+auto vmbr0
+iface vmbr0 inet static
+    address $addr
+    gateway $gw
+    bridge-ports $nic
+    bridge-stp off
+    bridge-fd 0
+
+source /etc/network/interfaces.d/*
+IF
+[ -z "$managed" ] || printf '\n%s\n' "$managed" >> /etc/network/interfaces
+cat > /etc/hosts <<H
+127.0.0.1 localhost
+${addr%/*} $name.$domain $name
+H
+printf 'search %s\nnameserver %s\n' "$domain" "$dns" > /etc/resolv.conf
+# postfix's main.cf was generated at build time, before the hostname existed.
+postconf -e "myhostname=$name.$domain" "mydestination=$name.$domain, $name, localhost.localdomain, localhost"
+postfix set-permissions >/dev/null 2>&1 || true
+if [ -f "$c/hitkit.pve.root-password" ]; then
+    printf 'root:%s\n' "$(cat "$c/hitkit.pve.root-password")" | chpasswd
+fi

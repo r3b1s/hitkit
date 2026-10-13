@@ -1,0 +1,28 @@
+#!/bin/sh
+# Proxmox VE's repositories as the web UI (Node > Updates > Repositories) leaves them
+# on a machine without a subscription: Debian's and the no-subscription repository
+# enabled (files from mkosi.extra), the enterprise entries kept but "Enabled: false",
+# so they can be re-enabled there once a subscription key is added. Run once, at image
+# build (and by the ludus install, whose Ansible deletes the enterprise file); never per
+# boot, so choices made later in the UI stand.
+set -eu
+d=/etc/apt/sources.list.d
+
+disable() {  # add "Enabled: false" to every deb822 stanza of $1 that has no Enabled field
+    [ -f "$1" ] || return 0
+    awk 'BEGIN { RS = ""; ORS = "\n\n" } { if ($0 !~ /(^|\n)Enabled:/) $0 = $0 "\nEnabled: false"; print }' \
+        "$1" > "$1.hitkit-tmp"
+    mv "$1.hitkit-tmp" "$1"
+}
+
+if [ ! -f $d/pve-enterprise.sources ]; then
+    cat > $d/pve-enterprise.sources <<SOURCES
+Types: deb
+URIs: https://enterprise.proxmox.com/debian/pve
+Suites: trixie
+Components: pve-enterprise
+Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg
+SOURCES
+fi
+disable $d/pve-enterprise.sources
+disable $d/ceph.sources

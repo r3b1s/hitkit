@@ -1,0 +1,5 @@
+enable docker.service
+enable containerd.service
+enable forgejo-runner.service
+enable forgejo-runner-job.service
+enable hitkit-prepull.service

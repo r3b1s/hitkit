@@ -1,0 +1,43 @@
+# The forge: Forgejo + CI runner VM(s) + Renovate, wired together (design §9.3).
+name = "forge"
+description = "Forgejo forge, Forgejo Actions runner VMs and Renovate, wired together"
+version = 1
+
+[knobs.runners]
+type = "int"
+default = 1
+min = 0
+max = 10
+help = "Number of persistent CI runner VMs"
+
+[knobs.ephemeral]
+type = "int"
+default = 0
+min = 0
+max = 20
+help = "Max concurrent single-use job VMs (runs-on: ephemeral; all jobs if --runners 0)"
+
+[knobs.arch]
+type = "bool"
+default = false
+help = "Arch Linux job VMs in the ephemeral pool (runs-on: arch; needs --ephemeral N)"
+
+[knobs.renovate]
+type = "bool"
+default = true
+help = "Scheduled Renovate bot (hitkit/renovate)"
+
+[[machine]]
+name = "forgejo"
+role = "forgejo"
+cpus = 2
+memory_mib = 2048
+data_disk_gib = 20
+
+[[machine]]
+name = "runner"
+role = "runner"
+count_knob = "runners"
+cpus = 4
+memory_mib = 8192
+data_disk_gib = 60

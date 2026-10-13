@@ -1,0 +1,6 @@
+enable nftables.service
+enable libvirtd.socket
+enable libvirtd-ro.socket
+# Network listeners Debian leaves off on a real install (TLS needs certificates).
+disable libvirtd-tls.socket
+disable libvirtd-tcp.socket

@@ -1,0 +1,5 @@
+# Docker 29 stores images in containerd; keep them on the data disk (design §8.2)
+# so they survive OS upgrades and can be pre-pulled into the job-VM template.
+version = 3
+root = "/srv/data/containerd"
+disabled_plugins = ["io.containerd.grpc.v1.cri"]

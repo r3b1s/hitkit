@@ -1,0 +1,75 @@
+#!/bin/sh
+# First boot: install Ludus non-interactively (its --no-prompt mode with a written
+# config.yml). Runs every boot until Ludus reports its install complete, so an
+# interrupted install resumes; progress goes to the console (hitkit logs ludus -f).
+set -eu
+ludus=/opt/ludus
+[ -f $ludus/install/.stage-3-complete ] && exit 0
+c="${CREDENTIALS_DIRECTORY:?no credentials imported}"
+get() { sed -n "s/^$1=//p" "$c/hitkit.network"; }
+addr=$(get Address); ip=${addr%/*}; prefix=${addr#*/}; gw=$(get Gateway)
+
+mask() {  # prefix length -> dotted netmask
+    m=$(( 0xffffffff ^ ((1 << (32 - $1)) - 1) ))
+    echo "$(( (m >> 24) & 255 )).$(( (m >> 16) & 255 )).$(( (m >> 8) & 255 )).$(( m & 255 ))"
+}
+
+echo "hitkit: waiting for the Proxmox cluster filesystem"
+i=0; until [ -d /etc/pve/local ]; do i=$((i + 1)); [ $i -gt 120 ] && { echo "pmxcfs not up"; exit 1; }; sleep 1; done
+
+# Ludus's API serves Proxmox's custom certificate when there is one: the hitkit CA leaf
+# then covers both the Proxmox UI (:8006) and the Ludus API (:8080).
+cp /etc/hitkit/tls/server.crt /etc/pve/local/pveproxy-ssl.pem
+cp /etc/hitkit/tls/server.key /etc/pve/local/pveproxy-ssl.key
+systemctl restart pveproxy
+
+# Ranges, templates and ISOs live on the data disk (storage "data").
+if ! grep -qs '^dir: data$' /etc/pve/storage.cfg; then
+    install -d /srv/data/pve
+    pvesm add dir data --path /srv/data/pve --content images,rootdir,iso,vztmpl,backup,snippets
+fi
+
+if [ -x $ludus/ludus-server ]; then
+    cd $ludus  # a resumed install runs the copy Ludus made of itself
+else
+    work=/var/lib/hitkit-ludus
+    install -d -m 0700 $work
+    install -m 0755 /usr/lib/hitkit/ludus/ludus-server $work/ludus-server
+    key=$(head -c 512 /dev/urandom | tr -dc 'A-Za-z0-9' | head -c 32)
+    umask 077
+    cat > $work/config.yml <<CONFIG
+# Written by hitkit (images/ludus/.../ludus-install); Ludus copies it to $ludus/config.yml.
+proxmox_node: $(hostname)
+proxmox_interface: vmbr0
+proxmox_local_ip: $ip
+proxmox_public_ip: $ip
+proxmox_gateway: $gw
+proxmox_netmask: $(mask "$prefix")
+proxmox_vm_storage_pool: data
+proxmox_vm_storage_format: qcow2
+proxmox_iso_storage_pool: data
+proxmox_invalid_cert: true
+proxmox_url: https://127.0.0.1:8006
+ludus_nat_interface: vmbr1000
+prevent_user_ansible_add: false
+sso_require_existing_user: true
+create_default_range: true
+license_key: community
+expose_admin_port: false
+port: 8080
+admin_port: 8081
+data_directory: $ludus/db
+database_encryption_key: $key
+wireguard_port: 51820
+max_log_history: 100
+register_default_source: true
+sync_sources_on_startup: true
+cluster_mode: false
+CONFIG
+    cd $work
+fi
+echo "hitkit: installing Ludus (ansible output: $ludus/install/install.log)"
+./ludus-server --no-prompt
+# Ludus's Ansible (lae.proxmox) deletes the enterprise repository entries; put them back
+# disabled, as on any Proxmox host, so the web UI can re-enable them.
+[ -f $ludus/install/.stage-3-complete ] && /usr/lib/hitkit/pve-repos

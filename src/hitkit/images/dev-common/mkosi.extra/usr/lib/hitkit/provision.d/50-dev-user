@@ -1,0 +1,21 @@
+#!/bin/sh
+# The development user, on every dev-VM distro: home on the persistent data
+# disk (fixed UID so it survives OS upgrades), libvirt/kvm access for nested
+# hitkit, passwordless sudo (sudoers.d/10-hitkit-dev), the same SSH access as
+# root, and a nested hitkit config on a subnet that cannot collide with this
+# VM's own uplink.
+set -eu
+home=/srv/data/dev
+if ! id dev >/dev/null 2>&1; then
+    useradd --uid 1000 --user-group --no-create-home --home-dir "$home" --shell /bin/bash dev
+fi
+for g in libvirt kvm; do getent group "$g" >/dev/null && usermod -aG "$g" dev; done
+install -d -o dev -g dev -m 0700 "$home" "$home/.ssh"
+install -o dev -g dev -m 0600 /root/.ssh/authorized_keys "$home/.ssh/authorized_keys"
+if [ ! -f "$home/.config/hitkit/config.toml" ]; then
+    install -d -o dev -g dev -m 0700 "$home/.config" "$home/.config/hitkit"
+    printf 'subnet = "10.78.0.0/24"\ninstall_id = "%s"\n' "$(tr -d - < /proc/sys/kernel/random/uuid)" \
+        > "$home/.config/hitkit/config.toml"
+    chown dev:dev "$home/.config/hitkit/config.toml"
+    chmod 0600 "$home/.config/hitkit/config.toml"
+fi

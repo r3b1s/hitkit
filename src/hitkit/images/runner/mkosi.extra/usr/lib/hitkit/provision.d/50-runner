@@ -1,0 +1,41 @@
+#!/bin/sh
+# Three modes, chosen by credentials (design §9.4, roadmap: ephemeral pool):
+#   persistent  hitkit.runner.uuid/token          forgejo-runner daemon, long-lived
+#   ephemeral   + hitkit.runner.handle            one-job for exactly that job, then power off
+#   prepull     hitkit.runner.prepull             pull job images onto the data disk, power off
+set -eu
+c="$CREDENTIALS_DIRECTORY"
+install -d -o runner -g runner -m 0750 /srv/data/runner /srv/data/runner/cache
+install -d -m 0711 /srv/data/docker
+install -d -m 0755 /etc/forgejo-runner /run/hitkit
+cfg=/etc/forgejo-runner/config.yml
+cp /usr/lib/hitkit/runner-config.yml "$cfg"
+# Pull-through caches (kit `cache`), when present: Docker Hub mirror for the
+# daemon, package indexes for jobs.
+if [ -f "$c/hitkit.runner.cache" ]; then
+    cache=$(cat "$c/hitkit.runner.cache")
+    cat > /etc/docker/daemon.json <<JSON
+{
+  "data-root": "/srv/data/docker",
+  "registry-mirrors": ["$cache:5000"]
+}
+JSON
+    sed -i "/^  envs:/a\\    PIP_INDEX_URL: $cache:5002/index/\\n    UV_DEFAULT_INDEX: $cache:5002/index/\\n    NPM_CONFIG_REGISTRY: $cache:5003/" "$cfg"
+else
+    printf '{\n  "data-root": "/srv/data/docker"\n}\n' > /etc/docker/daemon.json
+fi
+if [ -f "$c/hitkit.runner.prepull" ]; then
+    touch /run/hitkit/prepull
+elif [ -f "$c/hitkit.runner.handle" ]; then
+    touch /run/hitkit/ephemeral
+    sed -i 's/# @EPHEMERAL@ /- /' "$cfg"
+else
+    cat >> "$cfg" <<CFG
+server:
+  connections:
+    hitkit:
+      url: https://forgejo.hitkit.internal/
+      uuid: $(cat "$c/hitkit.runner.uuid")
+      token_url: file:\$CREDENTIALS_DIRECTORY/hitkit.runner.token
+CFG
+fi

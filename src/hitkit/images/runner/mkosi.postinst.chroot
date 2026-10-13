@@ -1,0 +1,3 @@
+#!/bin/sh
+set -e
+useradd --system --home-dir /srv/data/runner --no-create-home --shell /bin/sh --groups docker runner

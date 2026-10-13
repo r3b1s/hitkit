@@ -1,0 +1,13 @@
+#!/bin/sh
+# Images are built unprivileged and mkosi maps a single user, so every file in
+# an image is owned by root: chowns in package postinst scripts are lost.
+# Roles declare what needs a service user in /usr/lib/hitkit/ownership.d/*.conf
+# ("owner:group path [-R]"); this restores it on every boot.
+set -eu
+for f in /usr/lib/hitkit/ownership.d/*.conf; do
+    [ -f "$f" ] || continue
+    grep -v -e '^[[:space:]]*#' -e '^[[:space:]]*$' "$f" | while read -r owner path recursive; do
+        [ -e "$path" ] || continue
+        if [ "${recursive:-}" = "-R" ]; then chown -R "$owner" "$path"; else chown "$owner" "$path"; fi
+    done
+done

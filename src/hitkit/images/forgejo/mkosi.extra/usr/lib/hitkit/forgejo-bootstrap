@@ -1,0 +1,14 @@
+#!/bin/sh
+# Runs as the forgejo user before every start: migrate, then make sure the
+# hitkit-admin account exists with the password from its credential.
+set -eu
+cfg=/etc/forgejo/app.ini
+pw=$(cat "$CREDENTIALS_DIRECTORY/hitkit.fj.admin-password")
+forgejo --config "$cfg" migrate >/dev/null
+if forgejo --config "$cfg" admin user list --admin | awk 'NR>1 {print $2}' | grep -qx hitkit-admin; then
+    forgejo --config "$cfg" admin user change-password --username hitkit-admin \
+        --password "$pw" --must-change-password=false >/dev/null
+else
+    forgejo --config "$cfg" admin user create --admin --username hitkit-admin \
+        --email hitkit-admin@hitkit.internal --password "$pw" --must-change-password=false >/dev/null
+fi

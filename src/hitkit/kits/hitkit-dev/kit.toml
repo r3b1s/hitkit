@@ -1,0 +1,12 @@
+# Dogfooding: an Arch Linux machine with everything needed to develop and test
+# hitkit itself, including running a nested hitkit (subnet 10.78.0.0/24).
+name = "hitkit-dev"
+description = "Arch Linux VM for developing hitkit inside hitkit (nested virtualization)"
+version = 1
+
+[[machine]]
+name = "dev"
+role = "hitkit-dev"
+cpus = 4
+memory_mib = 8192
+data_disk_gib = 80

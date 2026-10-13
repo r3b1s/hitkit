@@ -1,0 +1,4 @@
+# Proxmox manages networking with ifupdown2 (vmbr0) and /etc/resolv.conf itself.
+disable systemd-networkd.service
+disable systemd-resolved.service
+enable networking.service

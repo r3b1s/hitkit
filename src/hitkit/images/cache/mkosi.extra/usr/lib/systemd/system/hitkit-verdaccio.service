@@ -1,0 +1,14 @@
+[Unit]
+Description=Pull-through npm cache (verdaccio)
+After=network-online.target hitkit-provision.service
+Wants=network-online.target
+RequiresMountsFor=/srv/data
+
+[Service]
+User=hitkit-cache
+Environment=HOME=/srv/data/verdaccio
+ExecStart=/usr/local/bin/verdaccio --config /etc/hitkit-cache/verdaccio.yaml --listen 127.0.0.1:5103
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

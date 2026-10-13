@@ -1,0 +1,7 @@
+#!/bin/sh
+# Units are enabled via presets (common/.../10-hitkit.preset).
+set -e
+# A hitkit machine must never wait for console input.
+systemctl mask systemd-firstboot.service
+# Each machine gets one pinned ed25519 host key by credential; no others.
+systemctl mask sshd-keygen.service

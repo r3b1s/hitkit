@@ -1,0 +1,24 @@
+[project]
+name = "hitkit"
+version = "0.1.0"
+description = "Opinionated self-hosted dev infrastructure as libvirt VMs on your own workstation"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "click>=8.1",
+    "cryptography>=42",
+    "libvirt-python>=10.0",
+]
+
+[project.scripts]
+hitkit = "hitkit.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

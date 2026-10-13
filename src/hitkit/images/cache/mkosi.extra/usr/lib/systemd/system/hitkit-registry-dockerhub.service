@@ -1,0 +1,13 @@
+[Unit]
+Description=Pull-through OCI registry cache for https://registry-1.docker.io
+After=network-online.target hitkit-provision.service
+Wants=network-online.target
+RequiresMountsFor=/srv/data
+
+[Service]
+User=hitkit-cache
+ExecStart=/usr/local/bin/registry serve /etc/hitkit-cache/registry-dockerhub.yml
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
