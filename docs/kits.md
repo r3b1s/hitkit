@@ -192,8 +192,8 @@ where the hash covers every file (path, exec bit, content) in the chain, so edit
   distribution's package names. hitkit passes them to mkosi as `--package=` and
   folds the list into the image ID, so a change marks machines outdated. With no
   list, the ID is unchanged.
-- **Pinning policy.** Pin the newest stable release at least two weeks old, as the ludus
-  and forge pins do. Nothing enforces this; a bump is a reviewed edit.
+- **Pinning policy.** Pin the newest stable release, with no minimum age. Nothing
+  enforces this; a bump is a reviewed edit.
 
 ### Long first-boot work
 
