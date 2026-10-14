@@ -132,6 +132,17 @@ hitkit creds ludus                 # LUDUS_URL, your admin API key, Proxmox UI a
 hitkit ssh ludus -- ludus range list   # the Ludus client is installed in the VM
 ```
 
+### NetBird
+
+```sh
+hitkit up netbird                  # NetBird management server + dashboard behind Traefik; first boot pulls images
+hitkit creds netbird               # dashboard login, API token, reusable setup key
+hitkit token create netbird --name my-agent --scope user   # a service user with its own token
+```
+
+Peers join with `netbird up --management-url https://netbird.hitkit.internal --setup-key <key>`
+and must trust the hitkit CA (`sudo hitkit trust install` on the host).
+
 ### Developing hitkit inside hitkit
 
 ```sh

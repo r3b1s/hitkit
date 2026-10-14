@@ -33,7 +33,9 @@ What the records contain:
 - `proc`: every subprocess (mkosi, qemu-img, ssh, systemctl, nft and others),
   with argv, exit code, duration, and the stdout/stderr tail on failure.
 - `forgejo`: every API call hitkit itself makes, with method, path, status,
-  duration, and the response body on errors. `auth` names the credential kind
+  duration, and the response body on errors. NetBird API calls are `netbird api`
+  records (method, path, status, duration; `auth` is true when hitkit's token
+  was sent). `auth` names the credential kind
   (`token` for hitkit's internal forge admin token, `basic` for the human's
   login), never its value.
 - `machine.readiness`: `machine not ready`, with `gate` and the last 60
@@ -73,6 +75,8 @@ Each guest runs readiness gates in order, then prints `HITKIT-READY` or
 | `forgejo`, `forgejo-ssh` | Forgejo is healthy over HTTPS, and SSH on port 2222 | bootstrap failed; console tail |
 | `docker`, `runner` | Docker is up and the runner is registered | Forgejo unreachable from the runner |
 | `caches`, `proxmox` | the kit's services | console tail |
+| `ludus` | the first-boot install finished and the API answers | install failed; see the `ludus` row in section 4 |
+| `netbird` | NetBird's server and dashboard answer over HTTPS through Traefik | image pull failed (no internet) or a container exits; `hitkit ssh netbird -- journalctl -u netbird -b`, then `docker compose -f /usr/lib/hitkit/netbird/compose.yml ps` |
 
 ```sh
 hitkit logs <machine>                 # the whole serial console log (boot, gates, marker)
@@ -97,7 +101,10 @@ at `~/.local/share/hitkit/vms/<machine>/console.failed.log`.
 | `cannot reach Forgejo` | `hitkit status forge`, then `hitkit up forge` (idempotent; restarts what's down). |
 | `internal error: <Exception>` | A hitkit bug. Report it with the output of `hitkit trace <id>` (secrets are already masked). |
 | CI job stuck in `waiting` | No runner serves its `runs-on` label: `ephemeral` needs `--ephemeral N` and `hitkit pool status` showing `service_active: true`. Otherwise check `runner-N` with `hitkit status forge`. |
-| Name doesn't resolve on the host | `hitkit doctor` (hosts-file and network checks). A new kit's machine (e.g. `ludus`) needs `sudo hitkit setup` once to publish its name. |
+| Name doesn't resolve on the host | `hitkit doctor` (hosts-file and network checks). A new kit's machine (e.g. `ludus`, `netbird`) needs `sudo hitkit setup` once to publish its name. |
+| `cannot reach NetBird at https://netbird.hitkit.internal: … Name or service not known` | The machine is up but the host can't resolve its name: ask the user to run `sudo hitkit setup`, then re-run `hitkit up netbird`. |
+| `NetBird API error 401/403` | With your own token: revoked or expired, or its service user's role lacks the permission (service users also get 403 on `/api/users/current`). Mint another with `hitkit token create netbird`. hitkit's own token is checked and renewed by `hitkit up netbird`. |
+| `NetBird is set up, but hitkit holds no valid API token` | hitkit's owner token expired (a year without `hitkit up netbird`) or the instance was claimed outside hitkit. Follow the hint; starting over deletes NetBird's data, so ask the user first. |
 | Every VM stopped at once | Check `hitkit doctor`'s `session-daemon` line. VMs belong to libvirt's session daemon and live and die with its cgroup. hitkit runs it as `hitkit-libvirt.service`; if a client such as virsh spawned one elsewhere, follow the hint. |
 | "resuming … from the state libvirt saved" | Expected after a logout or reboot: libvirt saved the running VM, and `up` resumes it, keeping unflushed writes. Readiness is then checked over SSH. |
 | Data seems "reset" after `up` | Look at kept disks: `hitkit gc` lists `vms/.kept/`. The newest one per machine is reused, and older ones stay for inspection. |

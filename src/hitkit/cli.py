@@ -536,7 +536,9 @@ def _token_hooks(kit_name: str):
 @token.command("create")
 @click.argument("kit_name")
 @click.option("--name", required=True, help="Token name (unique per user).")
-@click.option("--scope", "scopes", multiple=True, help="Scope, repeatable (e.g. write:repository). Defaults to repo/issue/package access.")
+@click.option("--scope", "scopes", multiple=True,
+              help="forge: a scope, repeatable (e.g. write:repository; default repo/issue/package access). "
+                   "netbird: the service user's role (default admin).")
 @click.pass_context
 def token_create(ctx, kit_name, name, scopes) -> None:
     """Mint a scoped token; it is shown once."""
@@ -545,7 +547,8 @@ def token_create(ctx, kit_name, name, scopes) -> None:
         _emit(ctx, data)
     else:
         click.echo(data["token"])
-        click.echo(f"(user {data['user']}, scopes: {', '.join(data['scopes'])})", err=True)
+        tail = f", expires {data['expires']}" if data.get("expires") else ""
+        click.echo(f"(user {data['user']}, scopes: {', '.join(data['scopes'])}{tail})", err=True)
 
 
 @token.command("list")
@@ -557,7 +560,8 @@ def token_list(ctx, kit_name) -> None:
         _emit(ctx, data)
     else:
         for t in data:
-            click.echo(f"{t['name']:<24} …{t['last_eight'] or ''}  {', '.join(t['scopes'])}")
+            tail = f"  expires {t['expires']}" if t.get("expires") else ""
+            click.echo(f"{t['name']:<24} …{t['last_eight'] or ''}  {', '.join(t['scopes'])}{tail}")
 
 
 @token.command("revoke")

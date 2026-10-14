@@ -1,0 +1,5 @@
+# Docker 29 stores images in containerd; keep them on the data disk so an
+# upgrade does not have to pull them again.
+version = 3
+root = "/srv/data/containerd"
+disabled_plugins = ["io.containerd.grpc.v1.cri"]

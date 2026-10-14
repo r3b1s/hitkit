@@ -72,6 +72,37 @@ wire it in. TLS uses the hitkit CA.
 - `stateful_os`: it is never re-imaged, so update it in place. Backups copy
   its OS and data disks offline (the VM is stopped meanwhile).
 
+## netbird
+
+- Machine `netbird`: NetBird's self-hosted stack (combined management, signal,
+  relay and STUN server, plus the dashboard) behind Traefik, run with Docker
+  Compose as upstream's quickstart does. Dashboard and API are at
+  `https://netbird.hitkit.internal` (hitkit CA); STUN is on UDP 3478. The first
+  boot pulls the container images, which needs internet access.
+- hitkit claims the fresh instance: an owner login for the dashboard, an owner
+  API token that `hitkit up netbird` renews before it expires (NetBird caps
+  tokens at 365 days), and a reusable, non-expiring setup key named `hitkit`.
+- `creds` keys: `url`, `email`, `password`, `api_url`, `api_token`,
+  `api_header` (`Authorization: Token …`), `api_token_expires`, `setup_key`,
+  `peer_join` and `ca_certificate`.
+- `hitkit token create netbird --name NAME [--scope ROLE]` creates a service
+  user `NAME` with that role (default `admin`; also `user`, `auditor`,
+  `network_admin`, `billing_admin`) and prints its token once (`--json`:
+  `{"name", "token", "scopes", "user", "expires"}`). Tokens last 365 days.
+  `token list` shows them; `token revoke netbird NAME` deletes the service
+  user. Service users get 403 on `/api/users/current`; other endpoints follow
+  their role.
+- Peers: `netbird up --management-url https://netbird.hitkit.internal --setup-key <setup_key>`.
+  They must trust the hitkit CA: hitkit VMs do; on the host, run `sudo hitkit trust install`.
+- Backups are offline (the VM stops during the copy) and include NetBird's
+  SQLite stores and the cached container images on `/srv/data`.
+- API example (header on stdin, out of argv):
+
+  ```sh
+  hitkit creds netbird --json | jq -r '"header = \"" + .api_header + "\""' \
+    | curl -sS --cacert ~/.local/share/hitkit/ca/ca.crt -K - https://netbird.hitkit.internal/api/peers
+  ```
+
 ## hitkit-dev, hitkit-dev-debian, hitkit-dev-fedora
 
 - Machines `dev` (Arch), `dev-debian` and `dev-fedora`. Each is for

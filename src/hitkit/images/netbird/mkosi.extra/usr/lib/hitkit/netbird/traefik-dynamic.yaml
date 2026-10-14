@@ -1,0 +1,7 @@
+# Every TLS router uses the machine's hitkit CA leaf (no ACME on the hitkit network).
+tls:
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /etc/hitkit/tls/server.crt
+        keyFile: /etc/hitkit/tls/server.key

@@ -1,0 +1,8 @@
+# Docker's official repository (design §8.1: docker-ce, not Debian's docker.io).
+# Key fingerprint 9DC8 5822 9FC7 DD38 854A  E2D8 8D81 803C 0EBF CD88.
+Types: deb
+URIs: https://download.docker.com/linux/debian
+Suites: trixie
+Components: stable
+Architectures: amd64
+Signed-By: /etc/apt/keyrings/docker.asc

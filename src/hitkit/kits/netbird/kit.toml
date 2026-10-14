@@ -1,0 +1,14 @@
+# NetBird (https://netbird.io) self-hosted: a management server to run tests and
+# automation against, claimed by hitkit on first boot so an owner login, an API
+# token and a reusable setup key are ready in `hitkit creds netbird`.
+name = "netbird"
+description = "NetBird 0.80.0 management server and dashboard behind Traefik (https://netbird.hitkit.internal), with API token and setup key"
+version = 1
+
+[[machine]]
+name = "netbird"
+role = "netbird"
+cpus = 2
+memory_mib = 2048
+data_disk_gib = 20
+ready_timeout = 1200  # the first boot pulls the container images

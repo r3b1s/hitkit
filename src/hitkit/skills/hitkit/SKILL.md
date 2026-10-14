@@ -1,6 +1,6 @@
 ---
 name: hitkit
-description: Provision and operate local self-hosted dev infrastructure (VMs) with the hitkit CLI - a Forgejo forge with CI runners, pull-through caches, Proxmox VE, plain Debian devboxes, and hitkit development VMs on this Linux workstation. Use when the user mentions hitkit, *.hitkit.internal hosts, or wants a local forge, CI runner, package cache, Proxmox, or a throwaway VM; covers bringing kits up and down, status, SSH, credentials, sizing knobs, upgrades and cleanup.
+description: Provision and operate local self-hosted dev infrastructure (VMs) with the hitkit CLI - a Forgejo forge with CI runners, pull-through caches, Proxmox VE, Ludus cyber ranges, a NetBird management server, plain Debian devboxes, and hitkit development VMs on this Linux workstation. Use when the user mentions hitkit, *.hitkit.internal hosts, or wants a local forge, CI runner, package cache, Proxmox, Ludus, NetBird server, or a throwaway VM; covers bringing kits up and down, status, SSH, credentials, sizing knobs, upgrades and cleanup.
 compatibility: Linux host where `sudo hitkit setup` has been run (libvirt, QEMU/KVM, mkosi). Needs a shell; no network beyond the host.
 ---
 
@@ -23,16 +23,20 @@ knobs change sizing and toggle features, never topology.
 3. **Keep secrets out of argv, chat and files.** `hitkit creds` prints
    passwords; use the values directly and never repeat them in your replies,
    commits or logs. Pipe tokens on stdin or pass them in environment variables.
-4. **Mint your own credentials.** For forge access, create a scoped token
-   (`hitkit token create forge --name agent-<task>`) instead of using the
-   human's password, and revoke it when the task is done (see the
-   `hitkit-forge` skill).
+4. **Mint your own credentials.** Instead of the human's password or
+   hitkit's own token, create a token for your task and revoke it when the
+   task is done: `hitkit token create forge --name agent-<task>` (scoped; see
+   the `hitkit-forge` skill) or `hitkit token create netbird --name
+   agent-<task> --scope <role>` (a NetBird service user; see
+   [references/kits.md](references/kits.md#netbird)).
 5. **Go through hitkit.** Don't edit machines with `virsh`, delete files
    under `~/.local/share/hitkit`, or hand-edit `/etc/hosts`. libvirt metadata
    is hitkit's source of truth; out-of-band changes produce ownership
    conflicts (exit code 5).
 6. **Expect long first runs.** The first `up` of a role builds its image with
-   mkosi, which takes several minutes (up to about 20 minutes). Later runs take
+   mkosi, which takes several minutes (up to about 20 minutes). Some kits
+   also download on their first boot (`netbird` pulls container images,
+   `ludus` installs Ludus), which needs internet access. Later runs take
    seconds. Use a generous command timeout (30 minutes or more) and don't
    interrupt it.
 7. **On failure, read the trace before retrying.** Every error prints
@@ -65,6 +69,8 @@ before you diagnose anything.
 | `forge` | `forgejo`, `runner-1`… | A Forgejo forge, CI runners and Renovate (see `hitkit-forge`) |
 | `cache` | `cache` | Pull-through caches for Docker Hub, ghcr.io, PyPI, npm and apt |
 | `proxmox` | `proxmox` | Proxmox VE 9 with an API token, for testing Proxmox tooling |
+| `ludus` | `ludus` | Ludus cyber ranges on Proxmox VE 9, with an admin API key |
+| `netbird` | `netbird` | A NetBird management server with an API token and setup key, for testing NetBird tooling |
 | `hitkit-dev` (`-debian`, `-fedora`) | `dev` (`dev-debian`, `dev-fedora`) | Developing hitkit itself, with nested KVM |
 
 Per-kit details (endpoints, credentials, knobs): [references/kits.md](references/kits.md).
@@ -124,7 +130,7 @@ hitkit logs <machine> [-f]            # serial console (boot output, readiness m
 Never disable host-key checking. hitkit pins each machine's key.
 
 TLS: every service has a certificate from the hitkit CA. The CA file is the
-`ca_certificate` path in `hitkit creds forge --json`, normally
+`ca_certificate` path in `hitkit creds <kit> --json`, normally
 `~/.local/share/hitkit/ca/ca.crt`. Pass it to clients (`curl --cacert`,
 `REQUESTS_CA_BUNDLE`, `NODE_EXTRA_CA_CERTS`, `GIT_SSL_CAINFO`) unless the user
 ran `hitkit trust install`. Never use `-k` or `verify=False`.

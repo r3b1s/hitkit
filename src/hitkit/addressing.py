@@ -30,7 +30,7 @@ def _slots() -> tuple[Slot, ...]:
     slots = [Slot("host", 1), Slot("forgejo", 10)]
     slots += [Slot(f"runner-{i}", 19 + i) for i in range(1, 11)]  # .20–.29
     slots += [Slot("proxmox", 30), Slot("ludus", 31), Slot("devbox", 40), Slot("dev", 50)]
-    slots += [Slot("dev-debian", 51), Slot("dev-fedora", 52), Slot("cache", 60)]
+    slots += [Slot("dev-debian", 51), Slot("dev-fedora", 52), Slot("cache", 60), Slot("netbird", 70)]
     slots += [Slot(f"ci-{i}", 99 + i) for i in range(1, 101)]  # .100–.199
     return tuple(slots)
 

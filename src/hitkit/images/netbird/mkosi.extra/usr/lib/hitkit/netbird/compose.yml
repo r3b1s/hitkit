@@ -1,0 +1,96 @@
+# NetBird as upstream's getting-started.sh (v0.80.0) renders it for the built-in
+# Traefik option, with these changes: images pinned by digest; TLS from the
+# hitkit CA leaf (traefik-dynamic.yaml) instead of Let's Encrypt; state bind-mounted
+# from the data disk; config.yaml rendered each boot from credentials
+# (provision.d/50-netbird); NB_SETUP_PAT_ENABLED so hitkit can claim the instance.
+name: netbird
+
+services:
+  traefik:
+    image: traefik:v3.7.14@sha256:575fa15b135078fe5e50aa847987d96dbddd7b093c172429618404df73f3fa7c
+    container_name: netbird-traefik
+    restart: unless-stopped
+    networks:
+      netbird:
+        ipv4_address: 172.30.0.10
+    command:
+      - "--log.level=INFO"
+      - "--accesslog=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=netbird"
+      - "--providers.file.filename=/etc/traefik/dynamic.yaml"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      # Disable timeouts for long-lived gRPC streams
+      - "--entrypoints.websecure.transport.respondingTimeouts.readTimeout=0"
+      - "--entrypoints.websecure.transport.respondingTimeouts.writeTimeout=0"
+      - "--entrypoints.websecure.transport.respondingTimeouts.idleTimeout=0"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--serverstransport.forwardingtimeouts.responseheadertimeout=0s"
+      - "--serverstransport.forwardingtimeouts.idleconntimeout=0s"
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /usr/lib/hitkit/netbird/traefik-dynamic.yaml:/etc/traefik/dynamic.yaml:ro
+      - /etc/hitkit/tls:/etc/hitkit/tls:ro
+
+  dashboard:
+    image: netbirdio/dashboard:v2.94.0@sha256:70e0fc6dd3b7758148d182fb55ecd8d4f9ce01e9bba56c9389224e0b8354009d
+    container_name: netbird-dashboard
+    restart: unless-stopped
+    networks: [netbird]
+    env_file:
+      - /usr/lib/hitkit/netbird/dashboard.env
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.netbird-dashboard.rule=Host(`netbird.hitkit.internal`)
+      - traefik.http.routers.netbird-dashboard.entrypoints=websecure
+      - traefik.http.routers.netbird-dashboard.tls=true
+      - traefik.http.routers.netbird-dashboard.service=dashboard
+      - traefik.http.routers.netbird-dashboard.priority=1
+      - traefik.http.services.dashboard.loadbalancer.server.port=80
+
+  # Combined server (Management + Signal + Relay + STUN)
+  netbird-server:
+    image: netbirdio/netbird-server:0.80.0@sha256:05b3d8d6d056e5062a2965d4d6e5d6d83f09f2bf9133947a8e5972e0e0e7a261
+    container_name: netbird-server
+    restart: unless-stopped
+    networks: [netbird]
+    ports:
+      - "3478:3478/udp"
+    environment:
+      # Lets POST /api/setup return a token; it only works until the first owner exists.
+      NB_SETUP_PAT_ENABLED: "true"
+    volumes:
+      - /srv/data/netbird:/var/lib/netbird
+      - /run/netbird/config.yaml:/etc/netbird/config.yaml
+    command: ["--config", "/etc/netbird/config.yaml"]
+    labels:
+      - traefik.enable=true
+      # gRPC router (needs h2c backend for HTTP/2 cleartext)
+      - traefik.http.routers.netbird-grpc.rule=Host(`netbird.hitkit.internal`) && (PathPrefix(`/signalexchange.SignalExchange/`) || PathPrefix(`/management.ManagementService/`) || PathPrefix(`/management.ProxyService/`))
+      - traefik.http.routers.netbird-grpc.entrypoints=websecure
+      - traefik.http.routers.netbird-grpc.tls=true
+      - traefik.http.routers.netbird-grpc.service=netbird-server-h2c
+      - traefik.http.routers.netbird-grpc.priority=100
+      # Backend router (relay, WebSocket, API, OAuth2)
+      - traefik.http.routers.netbird-backend.rule=Host(`netbird.hitkit.internal`) && (PathPrefix(`/relay`) || PathPrefix(`/ws-proxy/`) || PathPrefix(`/api`) || PathPrefix(`/oauth2`))
+      - traefik.http.routers.netbird-backend.entrypoints=websecure
+      - traefik.http.routers.netbird-backend.tls=true
+      - traefik.http.routers.netbird-backend.service=netbird-server
+      - traefik.http.routers.netbird-backend.priority=100
+      - traefik.http.services.netbird-server.loadbalancer.server.port=80
+      - traefik.http.services.netbird-server-h2c.loadbalancer.server.port=80
+      - traefik.http.services.netbird-server-h2c.loadbalancer.server.scheme=h2c
+
+networks:
+  netbird:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+          gateway: 172.30.0.1

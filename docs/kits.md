@@ -130,7 +130,7 @@ name `<name>.hitkit.internal`, and the MAC address.
 
 Pick an unused octet. In use: `1` host, `10` forgejo, `20`-`29` runner-1 to runner-10,
 `30` proxmox, `31` ludus, `40` devbox, `50` dev, `51` dev-debian, `52` dev-fedora, `60`
-cache, `100`-`199` ci-1 to ci-100. Octets `2`-`9` are reserved and `200`-`250` are the
+cache, `70` netbird, `100`-`199` ci-1 to ci-100. Octets `2`-`9` are reserved and `200`-`250` are the
 DHCP range (`docs/design.md` section 7.2).
 
 After adding a slot, run `sudo hitkit setup`. It needs root, is idempotent, and rewrites

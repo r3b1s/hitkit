@@ -1,0 +1,18 @@
+[Unit]
+Description=NetBird server, dashboard and Traefik (docker compose)
+Wants=network-online.target
+After=network-online.target docker.service hitkit-provision.service
+Requires=docker.service hitkit-provision.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# The first boot pulls the images (needs internet); later boots find them on the data disk.
+ExecStart=/usr/bin/docker compose -f /usr/lib/hitkit/netbird/compose.yml up --detach --wait --quiet-pull --remove-orphans
+ExecStop=/usr/bin/docker compose -f /usr/lib/hitkit/netbird/compose.yml stop
+StandardOutput=journal+console
+StandardError=journal+console
+TimeoutStartSec=30min
+
+[Install]
+WantedBy=multi-user.target
