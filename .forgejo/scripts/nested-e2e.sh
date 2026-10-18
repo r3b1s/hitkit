@@ -34,8 +34,11 @@ if systemctl is-active --quiet docker.service; then
     sudo systemctl stop docker.socket docker.service
     sudo iptables -P FORWARD ACCEPT
 fi
-sudo "$hitkit" setup
-sudo "$hitkit" trust install
+# The system libvirt daemon (hitkit's network); the image does not start it.
+sudo systemctl start libvirtd.socket libvirtd-ro.socket
+# Root must not leave bytecode in the runner's checkout, or the runner cannot clean it up.
+sudo env PYTHONDONTWRITEBYTECODE=1 "$hitkit" setup
+sudo env PYTHONDONTWRITEBYTECODE=1 "$hitkit" trust install
 "$hitkit" doctor || true
 end
 
