@@ -15,7 +15,10 @@ Environment=HOME=/home/runner
 LoadCredential=hitkit.runner.token
 LoadCredential=hitkit.runner.uuid
 LoadCredential=hitkit.runner.handle
-ExecStart=/bin/sh -c 'exec /usr/local/bin/forgejo-runner one-job --config /etc/forgejo-runner/config.yml --url https://forgejo.hitkit.internal/ --uuid "$(cat "$CREDENTIALS_DIRECTORY/hitkit.runner.uuid")" --token-url "file:$CREDENTIALS_DIRECTORY/hitkit.runner.token" --handle "$(cat "$CREDENTIALS_DIRECTORY/hitkit.runner.handle")"'
+# The forge is reached by the address its name has now: a job that runs a nested hitkit
+# maps forgejo.hitkit.internal to its own forge, which must not take this runner with it.
+# The forge's certificate covers its IP address too.
+ExecStart=/bin/sh -c 'forge=$(getent ahostsv4 forgejo.hitkit.internal | head -n1 | cut -d" " -f1); exec /usr/local/bin/forgejo-runner one-job --config /etc/forgejo-runner/config.yml --url "https://$$forge/" --uuid "$(cat "$CREDENTIALS_DIRECTORY/hitkit.runner.uuid")" --token-url "file:$CREDENTIALS_DIRECTORY/hitkit.runner.token" --handle "$(cat "$CREDENTIALS_DIRECTORY/hitkit.runner.handle")"'
 TimeoutStartSec=4h
 
 [Install]

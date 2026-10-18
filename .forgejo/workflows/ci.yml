@@ -1,0 +1,32 @@
+# Local CI on the maintainer's own hitkit forge (`hitkit up forge --ephemeral N --arch`),
+# run before a change is pushed to GitHub. Both jobs get a fresh Arch job VM that has
+# hitkit's host toolchain baked in (~/.config/hitkit/images/runner-arch.toml).
+name: local-ci
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  unit:
+    runs-on: arch
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: uv sync --locked
+      - run: uv run pytest
+
+  e2e:
+    needs: unit
+    runs-on: arch
+    timeout-minutes: 120
+    steps:
+      # The VM's root partition is small; everything hitkit keeps goes to the data disk.
+      - name: Home directories on the data disk
+        run: |
+          for d in .cache .config .local; do
+            mkdir -p "/srv/data/runner/home/$d"
+            ln -sfn "/srv/data/runner/home/$d" "$HOME/$d"
+          done
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Nested hitkit and the e2e tests
+        run: .forgejo/scripts/nested-e2e.sh
