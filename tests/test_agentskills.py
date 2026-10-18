@@ -131,6 +131,7 @@ def test_forge_api_sends_the_token_as_a_header_and_maps_http_errors(forge_api, m
         raise urllib.error.HTTPError(req.full_url, 404, "nf", None, io.BytesIO(b'{"message":"nope"}'))
 
     monkeypatch.setattr(forge_api.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(forge_api, "_ca", lambda: None)  # don't depend on this host's hitkit CA
 
     assert forge_api.main(["GET", "/repos/t/x"]) == 1
     assert seen[0].get_header("Authorization") == "token abc123"

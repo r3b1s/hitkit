@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Unit tests
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install libvirt headers for libvirt-python
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libvirt-dev pkg-config
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.13.1"
+          checksum: eadd9d27c134ab5ac1ffd4473b97a741407f3ea238288f03121fc4deddf90220
+          python-version: "3.12"
+          enable-cache: false
+      - run: uv sync --locked
+      - run: uv run pytest
+
+  zizmor:
+    name: Workflow lint (zizmor)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: zizmorcore/zizmor-action@85b2b9fb8e3325e7a23d7d0a9d7ba5ae0f999e3e # v0.7.1
+        with:
+          version: "1.31.1"
+          advanced-security: false
+          annotations: true

@@ -3,6 +3,8 @@ name = "hitkit"
 version = "0.1.0"
 description = "Opinionated self-hosted dev infrastructure as libvirt VMs on your own workstation"
 readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = [
     "click>=8.1",
