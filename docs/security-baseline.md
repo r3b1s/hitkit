@@ -51,13 +51,13 @@ release" requirements are not applicable until hitkit makes its first release.
 |---|---|---|
 | OSPS-AC-01.01 MFA for sensitive actions | met | self-reported by the maintainer: 2FA is on for the only account with access |
 | OSPS-AC-02.01 lowest default permissions | met | personal-account repository; self-reported: no collaborators. Any collaborator would get write access, the only role GitHub offers here |
-| OSPS-AC-03.01 no direct commits to `main` | **not met** | ruleset `protection` requires a pull request, but its target list is empty, so it applies to no branch (`GET /repos/r3b1s/hitkit/rulesets/25358796`, `rules/branches/main` returns none) |
-| OSPS-AC-03.02 `main` cannot be deleted | **not met** | same ruleset, same empty target list |
+| OSPS-AC-03.01 no direct commits to `main` | met | ruleset `protection` (id 25358796) targets the default branch and requires a pull request, the three CI checks and CodeQL results (`GET /repos/r3b1s/hitkit/rules/branches/main`). Its bypass list needs admin access to read and was not checked. The OSPS Baseline scanner reports this as failed; see open items |
+| OSPS-AC-03.02 `main` cannot be deleted | met | the same ruleset restricts deletion and blocks force pushes; the OSPS Baseline scanner agrees |
 | OSPS-BR-01.01 untrusted metadata in pipelines | met | workflows read event data only through action inputs, never in `run:` scripts; `zizmor 1.31.1` reports no findings |
 | OSPS-BR-01.03 untrusted code kept from privileged credentials | met | no `pull_request_target` or `workflow_run` triggers; the only secret (`PVTR_GITHUB_TOKEN`) is used by `osps-baseline.yml`, which runs only on schedule and manual dispatch |
 | OSPS-BR-03.01 encrypted official channels | met | the only official channel is the GitHub repository (HTTPS/SSH) |
 | OSPS-BR-03.02 authenticated distribution | met | installed from a `git clone` over HTTPS/SSH; nothing is published elsewhere |
-| OSPS-BR-07.01 secrets kept out of version control | met | `.gitignore` covers likely secret files; hitkit stores generated secrets in XDG directories outside the checkout; GitHub secret scanning is on for public repositories. A pattern grep of the full history found only test fixtures, not a full secret scan |
+| OSPS-BR-07.01 secrets kept out of version control | met | `.gitignore` covers likely secret files; hitkit stores generated secrets in XDG directories outside the checkout; the OSPS Baseline scanner reports GitHub secret scanning and push protection both enabled. A pattern grep of the full history found only test fixtures, not a full secret scan |
 | OSPS-DO-01.01 user guides | not applicable (after a release) | the README already documents install and every command; destructive commands need `--yes` |
 | OSPS-DO-02.01 defect reporting guide | met ahead of a release | README and CONTRIBUTING.md point to GitHub issues and say what a report contains |
 | OSPS-GV-02.01 public discussion | met | GitHub issues, linked from the README |
@@ -73,12 +73,12 @@ release" requirements are not applicable until hitkit makes its first release.
 | OSPS-QA-05.01 no generated executables | met | `git log --all --numstat` lists one binary file in history: `proxmox.gpg` |
 | OSPS-QA-05.02 no unreviewable binaries | met | that file is a public OpenPGP key (`file`), not code |
 | OSPS-VM-02.01 security contacts | met | SECURITY.md |
-| OSPS-QA-06.01 tests in CI | **not checked** | `ci.yml` runs `uv run pytest` on every pull request; not yet seen running on GitHub, and not yet a required check |
+| OSPS-QA-06.01 tests in CI | met | `ci.yml` runs `uv run pytest` on every pull request; it ran and passed on [#1](https://github.com/r3b1s/hitkit/pull/1) and on `main`, and *Unit tests* is a required check in the ruleset |
 | OSPS-QA-06.02 test documentation | met | CONTRIBUTING.md: local unit and end-to-end tests, the CI checks, and how to read results |
 | OSPS-VM-05.01 SCA remediation policy | met | SECURITY.md, "Scanning and remediation policy". Licence findings are not covered: hitkit has three direct dependencies, so licences are reviewed when one is added |
-| OSPS-VM-05.03 SCA check on every change | **not checked** | `osv-scanner.yml` scans all of `uv.lock` on every pull request; OSV-Scanner 2.7.0 run locally finds no issues and does flag a known-malicious PyPI package (MAL-2023-1401) in a test file. Not yet a required check |
+| OSPS-VM-05.03 SCA check on every change | met | `osv-scanner.yml` scans all of `uv.lock` on every pull request; it passed on [#1](https://github.com/r3b1s/hitkit/pull/1) and *Dependency scan (OSV-Scanner) / osv-scan* is a required check. OSV-Scanner 2.7.0 run locally flags a known-malicious PyPI package (MAL-2023-1401) in a test file |
 | OSPS-VM-06.01 SAST remediation policy | met | SECURITY.md, "Scanning and remediation policy" |
-| OSPS-VM-06.02 SAST check on every change | **not checked** | `codeql.yml` runs on every pull request; the ruleset blocks on CodeQL high-or-higher and error alerts, but applies to no branch yet, and CodeQL has not run yet |
+| OSPS-VM-06.02 SAST check on every change | met | `codeql.yml` runs on every pull request; it passed on [#1](https://github.com/r3b1s/hitkit/pull/1) with no alerts, and the ruleset's code scanning rule blocks merging on CodeQL alerts of high or higher security severity and on errors |
 
 ## Accepted risks
 
@@ -89,12 +89,20 @@ been accepted in this assessment.
 
 ## Open items
 
-- **Ruleset targets no branch.** Add the default branch as its target, then add the
-  required status checks *Unit tests*, *Workflow lint (zizmor)* and the OSV-Scanner job
-  (shown as *Dependency scan (OSV-Scanner) / osv-scan*) once they have run once. Closes AC-03.01, AC-03.02, and with CI,
-  QA-06.01, VM-05.03 and VM-06.02.
-- **OSPS Baseline scanner secret.** `osps-baseline.yml` needs a `PVTR_GITHUB_TOKEN`
-  repository secret (a read-only personal access token).
+- **OSPS Baseline scanner disagrees on two controls.** In its first run
+  ([39170950827](https://github.com/r3b1s/hitkit/actions/runs/39170950827), scanner
+  v0.31.0, catalog `osps-baseline-2026-08`) every other level 1 control passed.
+  - OSPS-AC-03.01: the scanner only accepts a "Restrict updates" rule, a pull request
+    rule with at least one required approval, or classic protection that restricts
+    pushes or requires approvals (`evaluation_plans/osps/access_control/steps.go`). A
+    required pull request with no approvals is not on that list, yet it prevents direct
+    commits, which is all the requirement asks. Changing the ruleset to satisfy the
+    scanner would need a bypass for the only maintainer, which weakens it, so the
+    ruleset stays as it is. Decided 2026-10-18.
+  - OSPS-DO-01.01: the scanner looks for a user guide in a Security Insights file and
+    does not check whether the project has made a release. hitkit has not, so the
+    requirement does not apply yet. A Security Insights file would satisfy the scanner;
+    not added.
 - **Not scanned for vulnerabilities:** container images, apt packages and other artifacts
   pinned into the VM images (`pins.toml`, `mkosi.conf`).
 - **No full secret scan of history** has been run with a dedicated scanner.
