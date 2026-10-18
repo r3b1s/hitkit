@@ -1124,6 +1124,13 @@ rebuilds; later job VMs use the new image. With no list, IDs are unchanged.
   `docker run -d …`.
 - `container:` jobs are not supported on this label.
 
+**Nested hitkit in a job.** A job on this label can run hitkit itself, as hitkit's own
+local CI does (`.forgejo/workflows/ci.yml`). The nested `hitkit setup` maps
+`forgejo.hitkit.internal` to the nested forge in the job VM's `/etc/hosts`, so the
+runner resolves the forge's name once, when the job starts, and talks to that IP for the
+rest of the job; the forge's certificate covers its IP. Container runners do not need
+this: their jobs cannot change the runner VM's `/etc/hosts`.
+
 Verified end to end:
 - `/etc/os-release` reports Arch, and jobs run as `runner` (uid 1001, in
   `docker`).

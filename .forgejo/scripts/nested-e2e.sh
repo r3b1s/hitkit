@@ -1,8 +1,16 @@
 #!/bin/sh
-# Run hitkit nested inside this job VM, bring up a forge, and run the e2e tests
-# against it. The nested hitkit uses 10.78.0.0/24 so it cannot collide with the
-# VM's own uplink, as in the hitkit-dev kits.
+# Run hitkit nested inside this job VM, bring up a forge with one ephemeral job VM, and
+# run the e2e tests against it. The nested hitkit uses 10.78.0.0/24 so it cannot collide
+# with the VM's own uplink, as in the hitkit-dev kits. The job VM needs hitkit's host
+# toolchain; see CONTRIBUTING.md, "Local CI".
 set -eu
+
+for tool in mkosi virsh qemu-system-x86_64 uv; do
+    command -v "$tool" >/dev/null || {
+        echo "$tool is missing: add hitkit's toolchain to ~/.config/hitkit/images/runner-arch.toml (CONTRIBUTING.md, Local CI)" >&2
+        exit 1
+    }
+done
 
 uid=$(id -u)
 step() { echo "::group::$*"; }
@@ -45,13 +53,14 @@ end
 status=0
 step "hitkit up forge"
 start=$(date +%s)
-"$hitkit" up forge --memory runner=4096 --cpus runner=2 || status=$?
+# Small enough that the forge, one runner and one job VM fit in this job VM.
+"$hitkit" up forge --ephemeral 1 --memory runner=3072 --cpus runner=2 || status=$?
 echo "up forge: exit $status after $(( $(date +%s) - start ))s"
 end
 
 if [ "$status" -eq 0 ]; then
     step "e2e tests"
-    HITKIT_E2E=1 .venv/bin/python -m pytest tests/e2e/test_forge.py -v || status=$?
+    HITKIT_E2E=1 .venv/bin/python -m pytest tests/e2e -v -rs || status=$?
     end
 fi
 
