@@ -1,0 +1,33 @@
+name: OSPS Baseline
+
+# Weekly assessment against OSPS Baseline level 1. Never runs on pull requests,
+# so the token secret is not exposed to contributed code.
+on:
+  schedule:
+    - cron: "23 7 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  assess:
+    name: OSPS Baseline scanner
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: revanite-io/osps-baseline-action@d0d850b592f1788b2631f1dfdf84d80ea8c720f5 # v1.5.3
+        with:
+          owner: ${{ github.repository_owner }}
+          repo: ${{ github.event.repository.name }}
+          token: ${{ secrets.PVTR_GITHUB_TOKEN }}
+          catalog: osps-baseline-2026-08
+          upload-sarif: "true"
+      - name: Keep the full results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: osps-baseline-results-${{ github.run_number }}
+          path: evaluation_results/
+          retention-days: 30

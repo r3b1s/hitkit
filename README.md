@@ -27,6 +27,7 @@ hitkit's venv (`.venv/bin/pip install 'git+https://github.com/systemd/mkosi@v27.
 ## Install (from a checkout)
 
 ```sh
+git clone https://github.com/r3b1s/hitkit.git && cd hitkit
 uv sync                 # builds libvirt-python against your system libvirt
 uv run hitkit doctor
 ```
@@ -159,3 +160,16 @@ Nested hitkit inside the dev VMs is preconfigured on `10.78.0.0/24`.
 uv run pytest                              # unit tests
 HITKIT_E2E=1 uv run pytest tests/e2e -v    # MVP exit criteria against a live `hitkit up forge`
 ```
+
+## Bugs, contributing and security
+
+- Bugs and questions: [GitHub issues](https://github.com/r3b1s/hitkit/issues); see
+  [CONTRIBUTING.md](CONTRIBUTING.md) for what a good report contains.
+- Contributing: [CONTRIBUTING.md](CONTRIBUTING.md).
+- Vulnerabilities: report privately, never in an issue; see [SECURITY.md](SECURITY.md).
+
+The canonical repository is <https://github.com/r3b1s/hitkit>.
+
+## License
+
+[Apache License 2.0](LICENSE).

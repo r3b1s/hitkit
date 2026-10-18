@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "secure-repo": {
+      "source": "r3b1s/secure-methodologies",
+      "sourceType": "github",
+      "skillPath": "skills/secure-repo/SKILL.md",
+      "computedHash": "de831d403c60d90d8d2c13604bc0e020fe14ac4b6559177a2381952940940537"
+    }
+  }
+}

@@ -7,3 +7,18 @@ build/
 *.egg-info/
 mkosi.tools
 mkosi.tools.manifest
+
+.claude
+.agents
+
+# Files likely to hold secrets; hitkit keeps its own in XDG directories, outside the checkout
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.kdbx
+id_rsa*
+id_ecdsa*
+id_ed25519*
