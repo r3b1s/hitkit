@@ -1,0 +1,94 @@
+# Local CI on the maintainer's own hitkit forge (`hitkit up forge --ephemeral N --arch`),
+# run before a change is pushed to GitHub. Every job gets a fresh Arch job VM that has
+# hitkit's host toolchain baked in (~/.config/hitkit/images/runner-arch.toml).
+name: local-ci
+
+# A push runs every job. To run only some e2e jobs, start the workflow by hand
+# (Actions > local-ci > Run workflow) and untick the others.
+on:
+  push:
+  workflow_dispatch:
+    inputs:
+      forge:
+        description: "e2e: cache and forge kits"
+        type: boolean
+        default: true
+      netbird:
+        description: "e2e: NetBird kit"
+        type: boolean
+        default: true
+      ludus:
+        description: "e2e: Ludus kit"
+        type: boolean
+        default: true
+
+jobs:
+  unit:
+    runs-on: arch
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: uv sync --locked
+      - run: uv run pytest
+
+  # Each e2e job brings up its kits nested in its own job VM (16 GiB, sized by the outer
+  # forge's runner size), so each kit group is tested in a clean hitkit.
+  e2e-forge:
+    needs: unit
+    if: github.event_name == 'push' || inputs.forge
+    runs-on: arch
+    timeout-minutes: 120
+    steps:
+      # The VM's root partition is small; everything hitkit keeps goes to the data disk.
+      - name: Home directories on the data disk
+        run: |
+          for d in .cache .config .local; do
+            mkdir -p "/srv/data/runner/home/$d"
+            ln -sfn "/srv/data/runner/home/$d" "$HOME/$d"
+          done
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The cache kit first, so the forge's runners are set up to use it.
+      - name: Nested cache and forge, and their e2e tests
+        run: >-
+          .forgejo/scripts/nested-e2e.sh
+          cache
+          'forge --ephemeral 1 --memory runner=3072 --cpus runner=2'
+          -- tests/e2e/test_forge.py tests/e2e/test_later_phases.py
+
+  e2e-netbird:
+    needs: unit
+    if: github.event_name == 'push' || inputs.netbird
+    runs-on: arch
+    timeout-minutes: 60
+    steps:
+      # The VM's root partition is small; everything hitkit keeps goes to the data disk.
+      - name: Home directories on the data disk
+        run: |
+          for d in .cache .config .local; do
+            mkdir -p "/srv/data/runner/home/$d"
+            ln -sfn "/srv/data/runner/home/$d" "$HOME/$d"
+          done
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Nested NetBird and its e2e tests
+        run: .forgejo/scripts/nested-e2e.sh netbird -- tests/e2e/test_kits.py -k netbird
+
+  e2e-ludus:
+    needs: unit
+    if: github.event_name == 'push' || inputs.ludus
+    runs-on: arch
+    timeout-minutes: 150
+    steps:
+      # The VM's root partition is small; everything hitkit keeps goes to the data disk.
+      - name: Home directories on the data disk
+        run: |
+          for d in .cache .config .local; do
+            mkdir -p "/srv/data/runner/home/$d"
+            ln -sfn "/srv/data/runner/home/$d" "$HOME/$d"
+          done
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Smaller than the kit's default (8 vCPU, 32 GiB): enough to install Ludus and
+      # serve its API, not to deploy ranges.
+      - name: Nested Ludus and its e2e tests
+        run: >-
+          .forgejo/scripts/nested-e2e.sh
+          'ludus --memory ludus=12288 --cpus ludus=4'
+          -- tests/e2e/test_kits.py -k ludus

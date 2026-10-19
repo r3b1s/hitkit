@@ -46,7 +46,8 @@ The unit tests need no virtualisation and are what every change must pass. The
 end-to-end tests are skipped unless `HITKIT_E2E=1` is set. They run against kits already
 up on the host: `hitkit up forge --ephemeral 1` at least, with the hitkit CA trusted
 (`sudo .venv/bin/hitkit trust install`); the cache and Proxmox tests skip unless those
-kits are up. Run them before changing images, kits or the machine layer.
+kits are up. Run them before changing images, kits or the machine layer, either here or
+through local CI (below), which needs no kits on your own host.
 
 ## Continuous integration
 
@@ -64,8 +65,56 @@ A failing check shows its output in the pull request's Checks tab; CodeQL and
 OSV-Scanner findings are also listed under the repository's Security tab. How findings
 are handled is in [SECURITY.md](SECURITY.md#scanning-and-remediation-policy).
 
-The end-to-end tests do not run in CI, by choice: they need KVM, root for host setup and
-long image builds, so they run locally as described above.
+The end-to-end tests do not run on GitHub, by choice: they need KVM, root for host setup
+and image builds. They run in local CI instead.
 
 A weekly workflow, `osps-baseline.yml`, also assesses the repository against the OSPS
 Baseline; it never runs on pull requests.
+
+## Local CI
+
+The maintainer checks changes on a hitkit forge on their own desktop before pushing them
+to GitHub. `.forgejo/workflows/ci.yml` runs the unit tests, then three end-to-end jobs,
+each in a fresh Arch job VM: `.forgejo/scripts/nested-e2e.sh` runs `hitkit setup` and
+brings up kits *nested* in that VM (on `10.78.0.0/24`), then runs their tests from
+`tests/e2e`. One job tests the cache and forge kits, one NetBird, one Ludus. GitHub ignores `.forgejo/`. Forgejo runs only `.forgejo/workflows`
+on a branch that has it; on a branch without it, Forgejo would try `.github/workflows`,
+and those jobs fail locally.
+
+One-time setup, on a host with nested virtualization:
+
+1. Give Arch job VMs hitkit's host toolchain, in `~/.config/hitkit/images/runner-arch.toml`:
+
+   ```toml
+   packages = [
+       "apt", "debian-archive-keyring", "dnsmasq", "dosfstools", "edk2-ovmf", "libvirt",
+       "mkosi", "mtools", "nftables", "pkgconf", "qemu-base", "systemd-ukify", "uv",
+   ]
+   ```
+
+2. Bring up the forge with Arch job VMs large enough for nested kits. Job VMs are
+   sized like the runners; two run at a time:
+
+   ```sh
+   hitkit up forge --ephemeral 2 --arch --memory runner=16384 --cpus runner=8 --disk runner=100
+   ```
+
+3. Create a private repository `<you>/hitkit` on the forge, and add it as a remote:
+
+   ```sh
+   git remote add forgejo forgejo.hitkit.internal:<you>/hitkit.git
+   ```
+
+For each change:
+
+```sh
+git push forgejo <branch>     # results: https://forgejo.hitkit.internal/<you>/hitkit/actions
+git push origin <branch>      # only once local CI passes; then open the pull request on GitHub
+```
+
+A push runs every job. When only some kits need testing again (say, after fixing one
+kit's test), push with `[skip ci]` in the commit message and start the workflow by hand:
+Actions > local-ci > Run workflow, with only those kits ticked. The unit tests always run.
+
+After a merge on GitHub, bring the forge's copy up to date:
+`git pull origin main && git push forgejo main`.

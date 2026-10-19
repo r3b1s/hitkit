@@ -2,7 +2,7 @@
 # image and installed on first boot (design §13.14). Its OS disk holds Ludus's users,
 # ranges and WireGuard keys, so it is stateful: updated in place, never re-imaged.
 name = "ludus"
-description = "Ludus 2.3.5 cyber-range server on Proxmox VE 9 (API https://ludus.hitkit.internal:8080)"
+description = "Ludus 2.3.8 cyber-range server on Proxmox VE 9 (API https://ludus.hitkit.internal:8080)"
 version = 1
 
 [[machine]]

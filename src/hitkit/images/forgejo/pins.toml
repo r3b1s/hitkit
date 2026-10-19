@@ -2,8 +2,8 @@
 # each one, then places it in the image at `dest`.
 [[artifact]]
 name = "forgejo"
-version = "16.0.5"
-url = "https://codeberg.org/forgejo/forgejo/releases/download/v16.0.5/forgejo-16.0.5-linux-amd64"
-sha256 = "2c548bf1bfa09a441a3a674b1dd4959d77576816ad50534c23496908a3ea5a19"
+version = "17.0.0"
+url = "https://codeberg.org/forgejo/forgejo/releases/download/v17.0.0/forgejo-17.0.0-linux-amd64"
+sha256 = "5a3b07e124ed70b4e46ee3939515f003bd3cc85352257a9a4607a527251042ca"
 dest = "/usr/local/bin/forgejo"
 mode = 0o755

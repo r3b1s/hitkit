@@ -59,7 +59,7 @@ wire it in. TLS uses the hitkit CA.
 ## ludus
 
 - Machine `ludus` (default 8 vCPU, 32 GiB, 250 GiB data): Proxmox VE 9 with
-  Ludus 2.3.5. Ludus is installed on first boot, which needs internet access
+  Ludus 2.3.8. Ludus is installed on first boot, which needs internet access
   and takes many minutes; watch with `hitkit logs ludus -f`.
 - The API is at `https://ludus.hitkit.internal:8080` and the Proxmox UI at
   `:8006`. Both use the hitkit CA.

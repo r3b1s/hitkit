@@ -16,7 +16,7 @@ def test_ludus_builds_on_the_proxmox_image_and_pins_its_binaries():
     dirs = [d.name for d in images.role_dirs("ludus")]
     assert "proxmox" in dirs
     names = {a.name: a for a in images.pinned_artifacts(images.role_dirs("ludus"))}
-    assert names["ludus"].version == "2.3.5" and len(names["ludus"].sha256) == 64
+    assert names["ludus"].version == "2.3.8" and len(names["ludus"].sha256) == 64
     assert names["ludus-client"].dest == "/usr/local/bin/ludus"
 
 

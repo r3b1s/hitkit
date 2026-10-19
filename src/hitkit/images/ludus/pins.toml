@@ -1,17 +1,17 @@
-# Pinned third-party artifacts (design §8.1). 2.3.5 is the newest release at least two
-# weeks old; sha256 from ludus_2.3.5_checksums.txt in the release's package registry.
+# Pinned third-party artifacts (design §8.1); sha256 from ludus_2.3.8_checksums.txt in
+# the release's package registry.
 [[artifact]]
 name = "ludus"
-version = "2.3.5"
-url = "https://gitlab.com/api/v4/projects/54052321/packages/generic/ludus/2.3.5/ludus-server-2.3.5"
-sha256 = "dcfaac75e92ddb15c7887d7a2a8a563c073ac62ebe8459c370de0fc2695e20ae"
+version = "2.3.8"
+url = "https://gitlab.com/api/v4/projects/54052321/packages/generic/ludus/2.3.8/ludus-server-2.3.8"
+sha256 = "7fe51a842abfa14797502f9732796364a331ea5b412e0e001b72cb37e5478609"
 dest = "/usr/lib/hitkit/ludus/ludus-server"
 mode = 0o755
 
 [[artifact]]
 name = "ludus-client"
-version = "2.3.5"
-url = "https://gitlab.com/api/v4/projects/54052321/packages/generic/ludus/2.3.5/ludus-client_linux-amd64-2.3.5"
-sha256 = "663d62a2796c2205ebc9165a14346895b8664a9bd47d7c01f48bf5dff5b61cad"
+version = "2.3.8"
+url = "https://gitlab.com/api/v4/projects/54052321/packages/generic/ludus/2.3.8/ludus-client_linux-amd64-2.3.8"
+sha256 = "03e66edcc8ea3eccef0a80fd524a534fd5b7eb363e8a5255330d8acf54266fb6"
 dest = "/usr/local/bin/ludus"
 mode = 0o755
