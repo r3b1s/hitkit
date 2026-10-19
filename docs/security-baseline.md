@@ -21,7 +21,7 @@ Statuses describe the commit this file ships with; a re-audit starts from here.
 | OSPS-VM-06.01: remediation policy for SAST findings | 3 | the policy VM-06.02 enforces |
 | OSPS-VM-06.02: every change checked by SAST | 3 | hitkit's own code runs privileged host setup and builds commands |
 
-Why not a higher level: one maintainer (level 2 needs two) and no releases yet. The
+Why not a higher level: one maintainer (level 2 needs two). The
 privileged parts of hitkit (`sudo hitkit setup`, `hitkit trust install`, credential
 generation) are a reason for closer review, not for a higher level.
 
@@ -30,8 +30,13 @@ generation) are a reason for closer review, not for a higher level.
 - **Hosting:** <https://github.com/r3b1s/hitkit> is the canonical, public repository.
   A GitLab copy exists and is private.
 - **CI:** GitHub Actions on GitHub-hosted runners only. No image builds or end-to-end
-  tests in CI; those run locally (they need KVM, root for host setup and long image
-  builds). Self-hosted runners must never run pull requests from this public repository.
+  tests there: they need KVM, root for host setup and image builds. They run in the
+  maintainer's local CI on a hitkit forge (`.forgejo/`, CONTRIBUTING.md "Local CI")
+  before a change is pushed to GitHub. Self-hosted runners must never run pull requests
+  from this public repository.
+- **Releases:** git tags (`v0.1.0` is the first), installed from a checkout of the tag.
+  The only release assets are the source archives GitHub generates for each tag; nothing
+  is published to a package registry.
 - **Tools chosen:** OSV-Scanner (SCA), CodeQL (SAST), zizmor (workflow analysis), OSPS
   Baseline scanner action (`revanite-io/osps-baseline-action`). Every action and tool is
   pinned to its latest stable release by exact version and commit SHA or sha256, per
@@ -44,8 +49,8 @@ None. Agents propose every change and make it only once the maintainer approves.
 
 ## Results
 
-Checked 2026-10-18 by reading the repository and the GitHub API, unless noted. "After a
-release" requirements are not applicable until hitkit makes its first release.
+Checked 2026-10-18 by reading the repository and the GitHub API, unless noted. hitkit's
+first release is `v0.1.0`, so the "after a release" requirements apply.
 
 | Requirement | Status | How it was checked |
 |---|---|---|
@@ -58,14 +63,14 @@ release" requirements are not applicable until hitkit makes its first release.
 | OSPS-BR-03.01 encrypted official channels | met | the only official channel is the GitHub repository (HTTPS/SSH) |
 | OSPS-BR-03.02 authenticated distribution | met | installed from a `git clone` over HTTPS/SSH; nothing is published elsewhere |
 | OSPS-BR-07.01 secrets kept out of version control | met | `.gitignore` covers likely secret files; hitkit stores generated secrets in XDG directories outside the checkout; the OSPS Baseline scanner reports GitHub secret scanning and push protection both enabled. A pattern grep of the full history found only test fixtures, not a full secret scan |
-| OSPS-DO-01.01 user guides | not applicable (after a release) | the README already documents install and every command; destructive commands need `--yes` |
-| OSPS-DO-02.01 defect reporting guide | met ahead of a release | README and CONTRIBUTING.md point to GitHub issues and say what a report contains |
+| OSPS-DO-01.01 user guides | met | the README covers install, host setup and the use of every kit; compared with `hitkit --help`, every command except `image` and `pool` is shown there (both are in docs/design.md; `pool run` is run by a service, not by users). Destructive commands need `--yes`, and the README says data is kept unless deleted explicitly; the OSPS Baseline scanner disagrees, see open items |
+| OSPS-DO-02.01 defect reporting guide | met | README and CONTRIBUTING.md point to GitHub issues and say what a report contains |
 | OSPS-GV-02.01 public discussion | met | GitHub issues, linked from the README |
 | OSPS-GV-03.01 contribution guide | met | CONTRIBUTING.md |
 | OSPS-LE-02.01 open source licence | met | Apache-2.0 (OSI approved) |
-| OSPS-LE-02.02 licence of released assets | not applicable | no releases |
+| OSPS-LE-02.02 licence of released assets | met | the `v0.1.0` source archive (`archive/refs/tags/v0.1.0.tar.gz`) is the only release asset, under Apache-2.0 |
 | OSPS-LE-03.01 licence in a standard location | met | `LICENSE`, matching `license = "Apache-2.0"` in `pyproject.toml`; a built wheel carries `License-Expression: Apache-2.0` |
-| OSPS-LE-03.02 licence with released assets | not applicable | no releases |
+| OSPS-LE-03.02 licence with released assets | met | the `v0.1.0` source archive contains `LICENSE`, identical to the Apache-2.0 text (sha256 `cfc7749b…`) |
 | OSPS-QA-01.01 public source at a stable URL | met | the repository opens without signing in |
 | OSPS-QA-01.02 public change history | met | full history is public |
 | OSPS-QA-02.01 dependency list | met | `pyproject.toml` and `uv.lock`; the third-party imports in `src/` are exactly click, cryptography and libvirt |
@@ -99,14 +104,16 @@ been accepted in this assessment.
     commits, which is all the requirement asks. Changing the ruleset to satisfy the
     scanner would need a bypass for the only maintainer, which weakens it, so the
     ruleset stays as it is. Decided 2026-10-18.
-  - OSPS-DO-01.01: the scanner looks for a user guide in a Security Insights file and
-    does not check whether the project has made a release. hitkit has not, so the
-    requirement does not apply yet. A Security Insights file would satisfy the scanner;
-    not added.
+  - OSPS-DO-01.01: the scanner looks for a user guide only in a Security Insights file.
+    The README is the user guide (see results); a Security Insights file pointing to it
+    would satisfy the scanner. Not added.
 - **Not scanned for vulnerabilities:** container images, apt packages and other artifacts
   pinned into the VM images (`pins.toml`, `mkosi.conf`).
 - **No full secret scan of history** has been run with a dedicated scanner.
 - **README security model.** The README does not yet summarise the risks of running
   hitkit (sudo setup, the host CA, where credentials live) or point to the threat model.
-- **Keeping pins current.** Nothing proposes updates to the pinned actions and tools yet.
-- **First release.** DO-01.01, LE-02.02 and LE-03.02 apply then.
+- **Keeping pins current.** Nothing proposes updates to the pinned actions and tools yet;
+  pins were last brought up to date by hand for `v0.1.0`.
+- **Highly visible warnings.** DO-01.01's recommendation asks for highly visible warnings
+  on destructive actions. `destroy --delete-data`, `gc` and `restore` are documented with
+  `--yes` and comments, not with a warning callout.
