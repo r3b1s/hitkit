@@ -12,7 +12,7 @@ Fedora 44. See [docs/design.md](docs/design.md).
 
 ## Requirements
 
-An x86-64 Linux host with KVM: Arch/CachyOS, Debian 13 or Fedora 44.
+An x86-64 Linux host with KVM. (Tested against Arch, Debian 13, and Fedora 44).
 `hitkit doctor` prints the exact packages for your distribution, e.g.:
 
 ```sh
