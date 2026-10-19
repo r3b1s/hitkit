@@ -70,8 +70,12 @@ def test_netbird_token_gets_its_own_working_service_user():
     # (the account setting regular_users_view_blocked).
     tok = hitkit("token", "create", "netbird", "--name", name)
     try:
-        me = call(f"{creds['api_url']}/users/current", {"Authorization": f"Token {tok['token']}"})
-        assert me["name"] == name and me["is_service_user"]
+        owner = {"Authorization": f"Token {creds['api_token']}"}
+        services = call(f"{creds['api_url']}/users?service_user=true", owner)
+        assert any(u["name"] == name and u["role"] == "admin" for u in services), services
+        # /users/current refuses every service user, so the token is tried on /groups.
+        groups = call(f"{creds['api_url']}/groups", {"Authorization": f"Token {tok['token']}"})
+        assert any(g["name"] == "All" for g in groups), groups
     finally:
         subprocess.run(HITKIT + ["token", "revoke", "netbird", name], check=True, capture_output=True)
 
