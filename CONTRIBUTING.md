@@ -74,10 +74,10 @@ Baseline; it never runs on pull requests.
 ## Local CI
 
 The maintainer checks changes on a hitkit forge on their own desktop before pushing them
-to GitHub. `.forgejo/workflows/ci.yml` runs the unit tests, then the end-to-end tests in
-a fresh Arch job VM: `.forgejo/scripts/nested-e2e.sh` runs `hitkit setup` and
-`hitkit up forge --ephemeral 1` *nested* in that VM (on `10.78.0.0/24`) and runs
-`tests/e2e` against it. GitHub ignores `.forgejo/`. Forgejo runs only `.forgejo/workflows`
+to GitHub. `.forgejo/workflows/ci.yml` runs the unit tests, then three end-to-end jobs,
+each in a fresh Arch job VM: `.forgejo/scripts/nested-e2e.sh` runs `hitkit setup` and
+brings up kits *nested* in that VM (on `10.78.0.0/24`), then runs their tests from
+`tests/e2e`. One job tests the cache and forge kits, one NetBird, one Ludus. GitHub ignores `.forgejo/`. Forgejo runs only `.forgejo/workflows`
 on a branch that has it; on a branch without it, Forgejo would try `.github/workflows`,
 and those jobs fail locally.
 
@@ -92,11 +92,11 @@ One-time setup, on a host with nested virtualization:
    ]
    ```
 
-2. Bring up the forge with Arch job VMs large enough for a nested forge. Job VMs are
-   sized like the runners:
+2. Bring up the forge with Arch job VMs large enough for nested kits. Job VMs are
+   sized like the runners; two run at a time:
 
    ```sh
-   hitkit up forge --ephemeral 1 --arch --memory runner=12288 --cpus runner=8
+   hitkit up forge --ephemeral 2 --arch --memory runner=16384 --cpus runner=8 --disk runner=100
    ```
 
 3. Create a private repository `<you>/hitkit` on the forge, and add it as a remote:

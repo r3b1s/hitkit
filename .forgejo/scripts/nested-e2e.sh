@@ -1,9 +1,22 @@
 #!/bin/sh
-# Run hitkit nested inside this job VM, bring up a forge with one ephemeral job VM, and
-# run the e2e tests against it. The nested hitkit uses 10.78.0.0/24 so it cannot collide
-# with the VM's own uplink, as in the hitkit-dev kits. The job VM needs hitkit's host
-# toolchain; see CONTRIBUTING.md, "Local CI".
+# Run hitkit nested inside this job VM, bring up kits, and run e2e tests against them.
+#
+#   nested-e2e.sh 'KIT [UP FLAGS]'... -- PYTEST ARGS
+#
+# Each quoted argument before `--` is one `hitkit up`, run in order; what follows `--`
+# goes to pytest. The nested hitkit uses 10.78.0.0/24 so it cannot collide with the job
+# VM's own uplink, as in the hitkit-dev kits. The job VM needs hitkit's host toolchain;
+# see CONTRIBUTING.md, "Local CI".
 set -eu
+
+ups=""
+while [ $# -gt 0 ] && [ "$1" != "--" ]; do
+    ups="$ups$1
+"
+    shift
+done
+[ "${1:-}" = "--" ] && shift
+[ -n "$ups" ] && [ $# -gt 0 ] || { echo "usage: $0 'KIT [UP FLAGS]'... -- PYTEST ARGS" >&2; exit 2; }
 
 for tool in mkosi virsh qemu-system-x86_64 uv; do
     command -v "$tool" >/dev/null || {
@@ -51,16 +64,21 @@ sudo env PYTHONDONTWRITEBYTECODE=1 "$hitkit" trust install
 end
 
 status=0
-step "hitkit up forge"
-start=$(date +%s)
-# Small enough that the forge, one runner and one job VM fit in this job VM.
-"$hitkit" up forge --ephemeral 1 --memory runner=3072 --cpus runner=2 || status=$?
-echo "up forge: exit $status after $(( $(date +%s) - start ))s"
-end
+while IFS= read -r up && [ "$status" -eq 0 ]; do
+    [ -n "$up" ] || continue
+    step "hitkit up $up"
+    start=$(date +%s)
+    # shellcheck disable=SC2086 # word splitting turns the spec into arguments
+    "$hitkit" up $up || status=$?
+    echo "up ${up%% *}: exit $status after $(( $(date +%s) - start ))s"
+    end
+done <<UPS
+$ups
+UPS
 
 if [ "$status" -eq 0 ]; then
     step "e2e tests"
-    HITKIT_E2E=1 .venv/bin/python -m pytest tests/e2e -v -rs || status=$?
+    HITKIT_E2E=1 .venv/bin/python -m pytest "$@" -v -rs || status=$?
     end
 fi
 
