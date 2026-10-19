@@ -1,4 +1,4 @@
-# NetBird as upstream's getting-started.sh (v0.80.0) renders it for the built-in
+# NetBird as upstream's getting-started.sh (v0.81.2) renders it for the built-in
 # Traefik option, with these changes: images pinned by digest; TLS from the
 # hitkit CA leaf (traefik-dynamic.yaml) instead of Let's Encrypt; state bind-mounted
 # from the data disk; config.yaml rendered each boot from credentials
@@ -7,7 +7,7 @@ name: netbird
 
 services:
   traefik:
-    image: traefik:v3.7.14@sha256:575fa15b135078fe5e50aa847987d96dbddd7b093c172429618404df73f3fa7c
+    image: traefik:v3.7.15@sha256:0f6150202bc1fed72a7bd2107460eaa510e5b8a905f3fdb5b84f2c8619c33368
     container_name: netbird-traefik
     restart: unless-stopped
     networks:
@@ -18,10 +18,14 @@ services:
       - "--accesslog=true"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
-      - "--providers.docker.network=netbird"
+      # Compose prefixes network names with the project name (`netbird`).
+      - "--providers.docker.network=netbird_netbird"
       - "--providers.file.filename=/etc/traefik/dynamic.yaml"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
+      # Strip client-sent alias headers (needs Traefik v3.7.13 or newer)
+      - "--entrypoints.web.http.aliasHeadersStrategy=delete"
+      - "--entrypoints.websecure.http.aliasHeadersStrategy=delete"
       # Disable timeouts for long-lived gRPC streams
       - "--entrypoints.websecure.transport.respondingTimeouts.readTimeout=0"
       - "--entrypoints.websecure.transport.respondingTimeouts.writeTimeout=0"
@@ -39,7 +43,7 @@ services:
       - /etc/hitkit/tls:/etc/hitkit/tls:ro
 
   dashboard:
-    image: netbirdio/dashboard:v2.94.0@sha256:70e0fc6dd3b7758148d182fb55ecd8d4f9ce01e9bba56c9389224e0b8354009d
+    image: netbirdio/dashboard:v2.95.0@sha256:3d6adfee19dd8d34d795af51daee69d27d2081d2076a5a304cfdd14acc67d6f4
     container_name: netbird-dashboard
     restart: unless-stopped
     networks: [netbird]
@@ -56,7 +60,7 @@ services:
 
   # Combined server (Management + Signal + Relay + STUN)
   netbird-server:
-    image: netbirdio/netbird-server:0.80.0@sha256:05b3d8d6d056e5062a2965d4d6e5d6d83f09f2bf9133947a8e5972e0e0e7a261
+    image: netbirdio/netbird-server:0.81.2@sha256:7caa37d30b20e54196e1076d4009fcdc4c9d83d174d8b9a8be52fb29c00708df
     container_name: netbird-server
     restart: unless-stopped
     networks: [netbird]

@@ -127,7 +127,7 @@ alone (update them in place with apt); backups include the OS disk.
 ### Ludus cyber ranges
 
 ```sh
-hitkit up ludus                    # Proxmox VE 9 + Ludus 2.3.5 (8 vCPU, 32 GiB); first boot installs Ludus (needs internet, many minutes)
+hitkit up ludus                    # Proxmox VE 9 + Ludus 2.3.8 (8 vCPU, 32 GiB); first boot installs Ludus (needs internet, many minutes)
 hitkit logs ludus -f               # watch the install
 hitkit creds ludus                 # LUDUS_URL, your admin API key, Proxmox UI and root password
 hitkit ssh ludus -- ludus range list   # the Ludus client is installed in the VM

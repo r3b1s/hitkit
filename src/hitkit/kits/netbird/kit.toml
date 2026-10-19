@@ -2,7 +2,7 @@
 # automation against, claimed by hitkit on first boot so an owner login, an API
 # token and a reusable setup key are ready in `hitkit creds netbird`.
 name = "netbird"
-description = "NetBird 0.80.0 management server and dashboard behind Traefik (https://netbird.hitkit.internal), with API token and setup key"
+description = "NetBird 0.81.2 management server and dashboard behind Traefik (https://netbird.hitkit.internal), with API token and setup key"
 version = 1
 
 [[machine]]

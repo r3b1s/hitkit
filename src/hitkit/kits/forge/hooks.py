@@ -27,8 +27,8 @@ BOT = "renovate-bot"
 ORG = "hitkit"
 RENOVATE_REPO = "renovate"
 RENOVATE_IMAGE = (
-    "ghcr.io/renovatebot/renovate:44.115.13"
-    "@sha256:0c04185c9e7ea5284da22ea0b2a2c88dcd3687badd8feb6c71691659b380df9b"
+    "ghcr.io/renovatebot/renovate:44.167.5"
+    "@sha256:c33150ec6407624a9399a2d827fd125becafdbe4519d7584488cbdd17f99081e"
 )
 ADMIN_SCOPES = [
     "write:activitypub", "write:admin", "write:issue", "write:misc", "write:notification",

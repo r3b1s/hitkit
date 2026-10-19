@@ -421,7 +421,7 @@ Kits are curated and shipped with hitkit. There is no external kit loading.
 | `forge` | `forgejo` (.10), `runner-N` (.20–.29), `ci-N` job VMs (.100–.199) | Forgejo, CI runners, the ephemeral pool, Renovate (§9.3, §13.1) |
 | `cache` | `cache` (.60): 2 vCPU, 2 GiB, 100 GiB data | Pull-through caches (§13.3) |
 | `proxmox` | `proxmox` (.30): 4 vCPU, 8 GiB, 100 GiB data | Proxmox VE 9 with API token (§13.4) |
-| `ludus` | `ludus` (.31): 8 vCPU, 32 GiB, 250 GiB data | Ludus 2.3.5 cyber ranges on Proxmox VE 9 (§13.14) |
+| `ludus` | `ludus` (.31): 8 vCPU, 32 GiB, 250 GiB data | Ludus 2.3.8 cyber ranges on Proxmox VE 9 (§13.14) |
 
 ### 9.3 MVP kit: `forge`
 
@@ -1035,8 +1035,7 @@ credential-triggered redefinition silently reverted it.
 
 Ludus cyber ranges on Proxmox VE 9, built on the `proxmox` role
 (`images/ludus`: `Include=../proxmox`) with the Ludus server and client
-pinned (2.3.5, the newest release at least two weeks old, sha256 from the
-release's checksum file).
+pinned (2.3.8, sha256 from the release's checksum file).
 
 **First boot.** `hitkit-ludus-install.service` (a oneshot; output on the
 console, so `hitkit logs ludus -f` shows progress):
