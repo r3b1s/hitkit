@@ -112,5 +112,9 @@ git push forgejo <branch>     # results: https://forgejo.hitkit.internal/<you>/h
 git push origin <branch>      # only once local CI passes; then open the pull request on GitHub
 ```
 
+A push runs every job. When only some kits need testing again (say, after fixing one
+kit's test), push with `[skip ci]` in the commit message and start the workflow by hand:
+Actions > local-ci > Run workflow, with only those kits ticked. The unit tests always run.
+
 After a merge on GitHub, bring the forge's copy up to date:
 `git pull origin main && git push forgejo main`.

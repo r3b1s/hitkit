@@ -3,9 +3,24 @@
 # hitkit's host toolchain baked in (~/.config/hitkit/images/runner-arch.toml).
 name: local-ci
 
+# A push runs every job. To run only some e2e jobs, start the workflow by hand
+# (Actions > local-ci > Run workflow) and untick the others.
 on:
   push:
   workflow_dispatch:
+    inputs:
+      forge:
+        description: "e2e: cache and forge kits"
+        type: boolean
+        default: true
+      netbird:
+        description: "e2e: NetBird kit"
+        type: boolean
+        default: true
+      ludus:
+        description: "e2e: Ludus kit"
+        type: boolean
+        default: true
 
 jobs:
   unit:
@@ -19,6 +34,7 @@ jobs:
   # forge's runner size), so each kit group is tested in a clean hitkit.
   e2e-forge:
     needs: unit
+    if: github.event_name == 'push' || inputs.forge
     runs-on: arch
     timeout-minutes: 120
     steps:
@@ -40,6 +56,7 @@ jobs:
 
   e2e-netbird:
     needs: unit
+    if: github.event_name == 'push' || inputs.netbird
     runs-on: arch
     timeout-minutes: 60
     steps:
@@ -56,6 +73,7 @@ jobs:
 
   e2e-ludus:
     needs: unit
+    if: github.event_name == 'push' || inputs.ludus
     runs-on: arch
     timeout-minutes: 150
     steps:
