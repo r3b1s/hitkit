@@ -66,7 +66,9 @@ def test_netbird_token_gets_its_own_working_service_user():
     require_kit("netbird")
     creds = hitkit("creds", "netbird")
     name = f"e2e-{int(time.time())}"
-    tok = hitkit("token", "create", "netbird", "--name", name, "--scope", "user")
+    # The default role, admin: NetBird blocks `user`-role accounts from the API by default
+    # (the account setting regular_users_view_blocked).
+    tok = hitkit("token", "create", "netbird", "--name", name)
     try:
         me = call(f"{creds['api_url']}/users/current", {"Authorization": f"Token {tok['token']}"})
         assert me["name"] == name and me["is_service_user"]
