@@ -219,13 +219,20 @@ setup time. hitkit never needs root again to register a new VM.
 | `.2`–`.9` | — | Reserved |
 | `.10` | `forgejo.hitkit.internal` | Forge |
 | `.20`–`.29` | `runner-N.hitkit.internal` | Persistent runners |
-| `.30` | `proxmox.hitkit.internal` | Roadmap |
-| `.40` | `devbox.hitkit.internal` | `devbox` kit: plain Debian VM |
-| `.50` | `dev.hitkit.internal` | `hitkit-dev` kit: Arch VM for developing hitkit (nested) |
-| `.100`–`.199` | `ci-N.hitkit.internal` | Roadmap: ephemeral runner pool |
-| `.200`–`.250` | — | DHCP range for ad-hoc, non-hitkit VMs |
+| `.11` | `proxmox.hitkit.internal` | `proxmox` kit |
+| `.12` | `pbs.hitkit.internal` | `pbs` kit |
+| `.13` | `ludus.hitkit.internal` | `ludus` kit |
+| `.14` | `devbox.hitkit.internal` | `devbox` kit: plain Debian VM |
+| `.15`–`.17` | `dev`, `dev-debian`, `dev-fedora` | `hitkit-dev` kits: VMs for developing hitkit (nested) |
+| `.18` | `cache.hitkit.internal` | `cache` kit |
+| `.19` | `netbird.hitkit.internal` | `netbird` kit |
+| `.30`–`.99` | — | Static addresses for your own guests; hitkit never uses them |
+| `.100`–`.199` | — | DHCP pool for ad-hoc, non-hitkit VMs |
+| `.200`–`.254` | `ci-N.hitkit.internal` | Overflow for hitkit's own addresses: the ephemeral runner pool (`ci-1`–`ci-55`; the last is reserved for template builds) |
 
-Guests receive static addresses. DNS names are a convenience layered on top.
+`.1`–`.29` is hitkit's: kits get their slots there. Guests that hitkit does not
+manage receive static addresses from `.30`–`.99` or DHCP leases from the pool. DNS
+names are a convenience layered on top.
 
 ### 7.3 Certificate authority
 
@@ -415,13 +422,13 @@ Kits are curated and shipped with hitkit. There is no external kit loading.
 
 | Kit | Machines | Purpose |
 |---|---|---|
-| `devbox` | `devbox` (.40): Debian 13, 2 vCPU, 2 GiB, 20 GiB data | Plain VM with SSH; the base every kit builds on |
-| `hitkit-dev` | `dev` (.50): Arch Linux, 4 vCPU, 8 GiB, 80 GiB data | Dogfooding: develop and test hitkit inside hitkit. It ships the full host toolchain (libvirt, QEMU, mkosi, Debian bootstrap tools, Python/uv), a passwordless-sudo `dev` user whose home is on the data disk, and a nested hitkit config on `10.78.0.0/24` so the nested network cannot collide with the VM's own uplink. Requires nested virtualization; its `kvm` readiness gate checks for it. |
-| `hitkit-dev-debian`, `hitkit-dev-fedora` | `dev-debian` (.51), `dev-fedora` (.52) | The same, on Debian 13 and Fedora 44: how hitkit's Debian/Fedora host support is tested (§13.9) |
-| `forge` | `forgejo` (.10), `runner-N` (.20–.29), `ci-N` job VMs (.100–.199) | Forgejo, CI runners, the ephemeral pool, Renovate (§9.3, §13.1) |
-| `cache` | `cache` (.60): 2 vCPU, 2 GiB, 100 GiB data | Pull-through caches (§13.3) |
-| `proxmox` | `proxmox` (.30): 4 vCPU, 8 GiB, 100 GiB data | Proxmox VE 9 with API token (§13.4) |
-| `ludus` | `ludus` (.31): 8 vCPU, 32 GiB, 250 GiB data | Ludus 2.3.8 cyber ranges on Proxmox VE 9 (§13.14) |
+| `devbox` | `devbox` (.14): Debian 13, 2 vCPU, 2 GiB, 20 GiB data | Plain VM with SSH; the base every kit builds on |
+| `hitkit-dev` | `dev` (.15): Arch Linux, 4 vCPU, 8 GiB, 80 GiB data | Dogfooding: develop and test hitkit inside hitkit. It ships the full host toolchain (libvirt, QEMU, mkosi, Debian bootstrap tools, Python/uv), a passwordless-sudo `dev` user whose home is on the data disk, and a nested hitkit config on `10.78.0.0/24` so the nested network cannot collide with the VM's own uplink. Requires nested virtualization; its `kvm` readiness gate checks for it. |
+| `hitkit-dev-debian`, `hitkit-dev-fedora` | `dev-debian` (.16), `dev-fedora` (.17) | The same, on Debian 13 and Fedora 44: how hitkit's Debian/Fedora host support is tested (§13.9) |
+| `forge` | `forgejo` (.10), `runner-N` (.20–.29), `ci-N` job VMs (.200–.254) | Forgejo, CI runners, the ephemeral pool, Renovate (§9.3, §13.1) |
+| `cache` | `cache` (.18): 2 vCPU, 2 GiB, 100 GiB data | Pull-through caches (§13.3) |
+| `proxmox` | `proxmox` (.11): 4 vCPU, 8 GiB, 100 GiB data | Proxmox VE 9 with API token (§13.4) |
+| `ludus` | `ludus` (.13): 8 vCPU, 32 GiB, 250 GiB data | Ludus 2.3.8 cyber ranges on Proxmox VE 9 (§13.14) |
 
 ### 9.3 MVP kit: `forge`
 

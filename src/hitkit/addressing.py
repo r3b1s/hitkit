@@ -13,8 +13,16 @@ from dataclasses import dataclass
 DOMAIN = "hitkit.internal"
 DEFAULT_SUBNET = "10.77.0.0/24"
 
-DHCP_FIRST = 200
-DHCP_LAST = 250
+# The /24, by last octet:
+#   .1–.29     hitkit's own: the host, then one slot per kit machine
+#   .30–.99    static addresses for your own guests (nothing in hitkit touches them)
+#   .100–.199  DHCP pool for ad-hoc guests
+#   .200–.254  overflow for hitkit's own: the ephemeral job VMs (ci-N)
+GUEST_STATIC_FIRST = 30
+GUEST_STATIC_LAST = 99
+DHCP_FIRST = 100
+DHCP_LAST = 199
+CI_POOL_SIZE = 55  # ci-1 .. ci-55 at .200–.254
 
 
 @dataclass(frozen=True)
@@ -29,9 +37,9 @@ class Slot:
 def _slots() -> tuple[Slot, ...]:
     slots = [Slot("host", 1), Slot("forgejo", 10)]
     slots += [Slot(f"runner-{i}", 19 + i) for i in range(1, 11)]  # .20–.29
-    slots += [Slot("proxmox", 30), Slot("ludus", 31), Slot("devbox", 40), Slot("dev", 50)]
-    slots += [Slot("dev-debian", 51), Slot("dev-fedora", 52), Slot("cache", 60), Slot("netbird", 70)]
-    slots += [Slot(f"ci-{i}", 99 + i) for i in range(1, 101)]  # .100–.199
+    slots += [Slot("proxmox", 11), Slot("pbs", 12), Slot("ludus", 13), Slot("devbox", 14), Slot("dev", 15)]
+    slots += [Slot("dev-debian", 16), Slot("dev-fedora", 17), Slot("cache", 18), Slot("netbird", 19)]
+    slots += [Slot(f"ci-{i}", 199 + i) for i in range(1, CI_POOL_SIZE + 1)]  # .200–.254
     return tuple(slots)
 
 

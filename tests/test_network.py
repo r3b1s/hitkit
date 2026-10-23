@@ -27,7 +27,7 @@ def test_network_ip_and_dhcp_range():
     assert ip.get("address") == "10.77.0.1"
     assert ip.get("netmask") == "255.255.255.0"
     rng = root.find("ip/dhcp/range")
-    assert (rng.get("start"), rng.get("end")) == ("10.77.0.200", "10.77.0.250")
+    assert (rng.get("start"), rng.get("end")) == ("10.77.0.100", "10.77.0.199")
 
 
 def test_network_has_one_dns_host_per_slot():

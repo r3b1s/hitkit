@@ -26,7 +26,7 @@ def _module():
 def test_kit_has_one_netbird_machine_on_its_slot():
     kit = kits.load("netbird")
     assert [(m.name, m.role) for m in kit.machines] == [("netbird", "netbird")]
-    assert slot("netbird").host_octet == 70
+    assert slot("netbird").host_octet == 19
     assert kit.machines[0].ready_timeout >= 600  # the first boot pulls the images
 
 

@@ -5,6 +5,8 @@ import pytest
 from hitkit.addressing import (
     DHCP_FIRST,
     DHCP_LAST,
+    GUEST_STATIC_FIRST,
+    GUEST_STATIC_LAST,
     SLOTS,
     host_records,
     parse_subnet,
@@ -48,9 +50,26 @@ def test_no_slot_falls_inside_dhcp_range():
         assert not (DHCP_FIRST <= s.host_octet <= DHCP_LAST), s.name
 
 
+def test_no_slot_falls_inside_the_static_guest_range():
+    for s in SLOTS:
+        assert not (GUEST_STATIC_FIRST <= s.host_octet <= GUEST_STATIC_LAST), s.name
+
+
+def test_kit_machines_fit_below_30_and_the_job_pool_in_the_overflow():
+    for s in SLOTS:
+        if s.name.startswith("ci-"):
+            assert 200 <= s.host_octet <= 254, s.name
+        else:
+            assert s.host_octet < 30, s.name
+
+
+def test_dhcp_pool_is_100_to_199():
+    assert (DHCP_FIRST, DHCP_LAST) == (100, 199)
+
+
 @pytest.mark.parametrize(
     ("name", "octet"),
-    [("forgejo", 10), ("runner-1", 20), ("runner-10", 29), ("ci-1", 100), ("ci-100", 199)],
+    [("host", 1), ("forgejo", 10), ("pbs", 12), ("runner-1", 20), ("runner-10", 29), ("ci-1", 200), ("ci-55", 254)],
 )
 def test_slot_address(name, octet):
     net = parse_subnet(DEFAULT)

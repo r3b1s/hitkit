@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Callable
 
 from hitkit import secrets, trace
+from hitkit.addressing import CI_POOL_SIZE
 from hitkit.errors import HitkitError
 from hitkit.forgejo import Forgejo, ForgejoError
 from hitkit.machine import lifecycle
@@ -33,8 +34,8 @@ from hitkit.paths import UserContext, write_private
 
 KIT = "forge"
 PREFIX = "ci-"
-MAX_SLOTS = 99  # ci-1 .. ci-99; ci-100 is reserved for template builds
-TEMPLATE_SLOT = "ci-100"
+MAX_SLOTS = CI_POOL_SIZE - 1  # ci-1 .. ci-54; the last slot is reserved for template builds
+TEMPLATE_SLOT = f"ci-{CI_POOL_SIZE}"
 JOB_TIMEOUT = 4 * 3600 + 600  # runner timeout (3h) plus boot/cleanup slack
 UNIT_NAME = "hitkit-pool.service"
 
