@@ -80,11 +80,13 @@ that agent harnesses supporting the format load on demand.
 - `hitkit-troubleshoot`: traces, doctor and readiness gates.
 
 ```sh
-hitkit skills                                  # list them (they live in src/hitkit/skills)
-hitkit skills --install ~/.claude/skills       # or whichever skills directory your harness reads
+hitkit skills                                  # list them (they live in skills/, also installable with `npx skills`)
+hitkit skills print hitkit                      # show one skill's SKILL.md
+hitkit skills install                          # into ./.agents/skills (asks before creating ./.agents)
+hitkit skills install ~/.claude/skills          # or whichever skills directory your harness reads
 ```
 
-Re-running `--install` refreshes the copies.
+Re-running `install` refreshes the copies.
 
 ### A local forge with CI and Renovate
 

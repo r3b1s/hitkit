@@ -22,5 +22,10 @@ dev = ["pytest>=8"]
 requires = ["hatchling>=1.26"]
 build-backend = "hatchling.build"
 
+# The agent skills live in skills/ at the repository root (so `npx skills` finds them);
+# the wheel bundles them as hitkit/skills.
+[tool.hatch.build.targets.wheel.force-include]
+"skills" = "hitkit/skills"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

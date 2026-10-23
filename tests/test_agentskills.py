@@ -77,15 +77,100 @@ def test_install_refuses_to_replace_someone_elses_directory(tmp_path):
     assert (tmp_path / "hitkit" / "notes.txt").exists()
 
 
-def test_skills_command_lists_and_installs(tmp_path, user, monkeypatch):
-    monkeypatch.setattr(cli, "current_user", lambda: user)
-    runner = CliRunner()
+def test_skills_live_in_the_repository_root_skills_directory():
+    root = agentskills.SKILLS_DIR
+    assert root.name == "skills" and (root / "hitkit" / "SKILL.md").is_file()
 
-    listing = runner.invoke(cli.cli, ["skills", "--json"])
-    install = runner.invoke(cli.cli, ["skills", "--install", str(tmp_path / "skills")])
+
+def test_wheel_bundles_the_root_skills_directory():
+    import tomllib
+    from pathlib import Path
+
+    pyproject = tomllib.loads((Path(__file__).parents[1] / "pyproject.toml").read_text())
+    force = pyproject["tool"]["hatch"]["build"]["targets"]["wheel"]["force-include"]
+    assert force == {"skills": "hitkit/skills"}
+
+
+@pytest.fixture
+def cli_user(user, monkeypatch):
+    monkeypatch.setattr(cli, "current_user", lambda: user)
+
+
+def test_skills_command_lists(cli_user):
+    listing = CliRunner().invoke(cli.cli, ["skills", "--json"])
 
     assert listing.exit_code == 0 and "hitkit-troubleshoot" in listing.output
-    assert install.exit_code == 0 and (tmp_path / "skills" / "hitkit" / "references" / "kits.md").is_file()
+
+
+def test_skills_install_copies_into_a_given_directory(cli_user, tmp_path):
+    result = CliRunner().invoke(cli.cli, ["skills", "install", str(tmp_path / "skills")])
+
+    assert result.exit_code == 0
+    assert (tmp_path / "skills" / "hitkit" / "references" / "kits.md").is_file()
+
+
+def test_skills_install_defaults_to_agents_skills_in_the_working_directory(cli_user, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".agents").mkdir()
+
+    result = CliRunner().invoke(cli.cli, ["skills", "install"])
+
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / ".agents" / "skills" / "hitkit" / "SKILL.md").is_file()
+
+
+def test_skills_install_asks_before_creating_agents_and_creates_it_on_yes(cli_user, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    result = CliRunner().invoke(cli.cli, ["skills", "install"], input="y\n")
+
+    assert result.exit_code == 0, result.output
+    assert "Create it?" in result.output
+    assert (tmp_path / ".agents" / "skills" / "hitkit-forge" / "SKILL.md").is_file()
+
+
+def test_skills_install_accepts_the_default_answer_to_the_prompt(cli_user, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    result = CliRunner().invoke(cli.cli, ["skills", "install"], input="\n")
+
+    assert result.exit_code == 0 and (tmp_path / ".agents" / "skills").is_dir()
+
+
+def test_skills_install_installs_nothing_when_the_prompt_is_declined(cli_user, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    result = CliRunner().invoke(cli.cli, ["skills", "install"], input="n\n")
+
+    assert result.exit_code == 1
+    assert not (tmp_path / ".agents").exists()
+
+
+def test_skills_install_yes_skips_the_prompt(cli_user, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    result = CliRunner().invoke(cli.cli, ["skills", "install", "--yes"])
+
+    assert result.exit_code == 0 and "Create it?" not in result.output
+    assert (tmp_path / ".agents" / "skills" / "hitkit" / "SKILL.md").is_file()
+
+
+def test_the_old_install_flag_is_gone(cli_user, tmp_path):
+    assert CliRunner().invoke(cli.cli, ["skills", "--install", str(tmp_path)]).exit_code == 2
+
+
+def test_skills_print_shows_the_skill_md(cli_user):
+    result = CliRunner().invoke(cli.cli, ["skills", "print", "hitkit-forge"])
+
+    assert result.exit_code == 0
+    assert result.output == (agentskills.find("hitkit-forge").path / "SKILL.md").read_text()
+
+
+def test_skills_print_unknown_name_lists_the_available_ones(cli_user):
+    result = CliRunner().invoke(cli.cli, ["skills", "print", "nope"])
+
+    assert result.exit_code == 1
+    assert "no bundled skill named 'nope'" in result.output and "hitkit-forge" in result.output
 
 
 @pytest.mark.parametrize("skill", SKILLS, ids=lambda s: s.name)

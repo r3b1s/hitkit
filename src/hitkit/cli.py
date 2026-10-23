@@ -950,25 +950,58 @@ def trace_cmd(ctx, ref, limit, only_failed) -> None:
         click.echo(f"{trace.local_time(t['start'], '%Y-%m-%d %H:%M:%S')}  {t['trace']}  {outcome:<6} {took:>7}  {t['cmd']}")
 
 
-@cli.command("skills")
-@click.option("--install", "dest", type=click.Path(file_okay=False, path_type=Path),
-              help="Copy the skills into this agent skills directory (e.g. ~/.claude/skills, ~/.agents/skills).")
+@cli.group("skills", invoke_without_command=True)
 @click.pass_context
-def skills_cmd(ctx, dest) -> None:
-    """Agent skills for using hitkit (Agent Skills format, any harness)."""
+def skills_cmd(ctx) -> None:
+    """Agent skills for using hitkit (Agent Skills format, any harness).
+
+    Without a subcommand, lists the bundled skills."""
+    if ctx.invoked_subcommand is not None:
+        return
     from hitkit import agentskills
 
-    if dest:
-        installed = agentskills.install(dest.expanduser())
-        _emit(ctx, [str(p) for p in installed]) if _json(ctx) else click.echo(
-            "\n".join(f"installed {p}" for p in installed))
-        return
     skills = agentskills.available()
     if _json(ctx):
         _emit(ctx, [{"name": s.name, "path": str(s.path), "description": s.description} for s in skills])
         return
     for s in skills:
         click.echo(f"{s.name:<20} {s.path}")
+
+
+@skills_cmd.command("install")
+@click.argument("dest", required=False, type=click.Path(file_okay=False, path_type=Path))
+@click.option("--yes", "-y", is_flag=True, help="Create ./.agents without asking when installing to the default location.")
+@click.pass_context
+def skills_install(ctx, dest, yes) -> None:
+    """Copy the bundled skills into DEST, a harness's skills directory (e.g. ~/.claude/skills).
+
+    Without DEST, installs into .agents/skills of the current directory, asking first
+    to create .agents if it does not exist. Re-running refreshes hitkit's own copies."""
+    from hitkit import agentskills
+
+    if dest is None:
+        agents = Path.cwd() / ".agents"
+        if not agents.is_dir() and not yes:
+            if not click.confirm(f"{agents} does not exist. Create it?", default=True, err=True):
+                raise HitkitError("not installed", hint="pass a directory: hitkit skills install DIR")
+        dest = agents / "skills"
+    installed = agentskills.install(dest.expanduser())
+    _emit(ctx, [str(p) for p in installed]) if _json(ctx) else click.echo(
+        "\n".join(f"installed {p}" for p in installed))
+
+
+@skills_cmd.command("print")
+@click.argument("name")
+@click.pass_context
+def skills_print(ctx, name) -> None:
+    """Print the SKILL.md of the bundled skill NAME."""
+    from hitkit import agentskills
+
+    text = (agentskills.find(name).path / "SKILL.md").read_text()
+    if _json(ctx):
+        _emit(ctx, {"name": name, "content": text})
+    else:
+        click.echo(text, nl=not text.endswith("\n"))
 
 
 @cli.group()

@@ -566,7 +566,7 @@ Conventions:
 | `hitkit mirror add\|list\|sync\|remove` | Push mirrors to GitHub/GitLab/any remote (§13.5) |
 | `hitkit pool run\|status` | The ephemeral runner pool's loop (run by `hitkit-pool.service`) and its state (§13.1) |
 | `hitkit trace [<id>\|last] [--failed]` | Recorded traces: recent invocations, or every record of one (§13.11) |
-| `hitkit skills [--install DIR]` | Agent skills for using hitkit (§13.12) |
+| `hitkit skills [install [DIR]\|print NAME]` | Agent skills for using hitkit: list, install, show one (§13.12) |
 
 ## 11. Roadmap
 
@@ -866,8 +866,8 @@ without re-running it with extra flags.
 ### 13.12 Agent skills
 
 hitkit is agent-first, so it ships its own operating instructions as
-[Agent Skills](https://agentskills.io) (`src/hitkit/skills/<name>/SKILL.md`,
-packaged in the wheel). They are harness-agnostic: plain Markdown with
+[Agent Skills](https://agentskills.io) (`skills/<name>/SKILL.md` at the repository root,
+where `npx skills` finds them; the wheel bundles them as `hitkit/skills` at build time). They are harness-agnostic: plain Markdown with
 `name`/`description` front matter, loaded on demand by any harness that
 supports the format.
 
@@ -877,9 +877,12 @@ supports the format.
 | `hitkit-forge` | Scoped tokens, the API, git over SSH or HTTPS without leaking tokens, CI labels and job environment, dispatching and watching runs, grants, mirrors |
 | `hitkit-troubleshoot` | Reading traces (§13.11), doctor, readiness gates, a table of common errors, recovery moves from least to most invasive |
 
-`hitkit skills` lists them, and `hitkit skills --install DIR` copies them into a
-harness's skills directory. It replaces only earlier copies of the same
-skills. Unit tests keep the skills honest: spec-valid front matter, resolvable
+`hitkit skills` lists them, `hitkit skills print NAME` prints one `SKILL.md`, and
+`hitkit skills install [DIR]` copies them into a harness's skills directory. Without
+`DIR` it installs into `.agents/skills` of the current directory, asking before it
+creates `.agents` (`--yes` skips the question). It replaces only earlier copies of
+the same skills. A source checkout, editable installs included, reads `skills/`
+directly. Unit tests keep the skills honest: spec-valid front matter, resolvable
 links, and every `hitkit …` command they show must exist in the CLI. The forge
 skill bundles two standard-library scripts. `forge_api.py` makes API calls with
 the token read from a 0600 file, never from argv. `run_workflow.py` dispatches
