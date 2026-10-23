@@ -1,0 +1,8 @@
+# Proxmox Backup Server 4 (Debian 13) no-subscription repository, for the image build.
+# Trixie release key 24B3 0F06 ECC1 836A 4E5E  FECB A7BC D142 0BFE 778E.
+Types: deb
+URIs: http://download.proxmox.com/debian/pbs
+Suites: trixie
+Components: pbs-no-subscription
+Architectures: amd64
+Signed-By: /etc/apt/keyrings/proxmox.gpg

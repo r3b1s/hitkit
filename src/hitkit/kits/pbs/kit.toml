@@ -1,0 +1,18 @@
+# Proxmox Backup Server as a VM on your workstation: a datastore on the data disk,
+# optionally added as backup storage to the proxmox kit's Proxmox VE.
+name = "pbs"
+description = "Proxmox Backup Server 4 with a datastore and API token, web UI on https://pbs.hitkit.internal:8007"
+version = 1
+
+[knobs.proxmox]
+type = "bool"
+default = false
+help = "Add this server as backup storage 'pbs' to the proxmox kit's Proxmox VE (if it is up)"
+
+[[machine]]
+name = "pbs"
+role = "pbs"
+cpus = 2
+memory_mib = 4096
+data_disk_gib = 100
+stateful_os = true  # users, tokens, datastore definitions and certificates live in /etc/proxmox-backup

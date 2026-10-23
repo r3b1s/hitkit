@@ -428,6 +428,7 @@ Kits are curated and shipped with hitkit. There is no external kit loading.
 | `forge` | `forgejo` (.10), `runner-N` (.20–.29), `ci-N` job VMs (.200–.254) | Forgejo, CI runners, the ephemeral pool, Renovate (§9.3, §13.1) |
 | `cache` | `cache` (.18): 2 vCPU, 2 GiB, 100 GiB data | Pull-through caches (§13.3) |
 | `proxmox` | `proxmox` (.11): 4 vCPU, 8 GiB, 100 GiB data | Proxmox VE 9 with API token (§13.4) |
+| `pbs` | `pbs` (.12): 2 vCPU, 4 GiB, 100 GiB data | Proxmox Backup Server 4 with a datastore and API token, optionally added to `proxmox` as backup storage (§13.16) |
 | `ludus` | `ludus` (.13): 8 vCPU, 32 GiB, 250 GiB data | Ludus 2.3.8 cyber ranges on Proxmox VE 9 (§13.14) |
 
 ### 9.3 MVP kit: `forge`
@@ -1146,6 +1147,31 @@ Verified end to end:
 - `sudo pacman -S` works, and so does `actions/checkout` over verified TLS.
 - Node 26, Python 3.14, Docker 29 and `docker run` all work.
 - A package baked in through the list runs without installing.
+
+### 13.16 `pbs` kit (`https://pbs.hitkit.internal:8007`)
+
+Proxmox Backup Server 4 is installed on Debian 13 the documented "install on Debian"
+way ([docs](https://pbs.proxmox.com/docs/installation.html)), on top of the base
+image: Debian's kernel and hitkit's systemd-networkd stay, unlike `proxmox`. The server
+and the keyring package are pinned from the no-subscription repository (same release
+key as the Proxmox VE one); the enterprise repository is kept, disabled. The
+configuration (users, tokens, datastores, certificates) lives in `/etc/proxmox-backup`
+on the OS disk, so the machine is `stateful_os`.
+
+hitkit generates the root password, installs the hitkit CA leaf as
+`proxy.pem`/`proxy.key` on proxmox-backup-proxy, creates the datastore `data` at
+`/srv/data/pbs` on the data disk, and mints `root@pam!hitkit` with the `Admin` role.
+`hitkit creds pbs` prints the URL, login, token, ready-made `PBSAPIToken` header and
+the `PBS_REPOSITORY` string for `proxmox-backup-client`.
+
+`hitkit up pbs --proxmox` also adds the datastore to the `proxmox` kit's Proxmox VE as
+backup storage `pbs`. It creates a separate user `pve@pbs` with its own token and the
+`DatastorePowerUser` role on `/datastore/data` only, so Proxmox VE can back up, restore
+and prune but is not a PBS admin, and hands the token secret to `pvesm` on stdin.
+Proxmox VE verifies the server through the hitkit CA it already trusts, so no
+fingerprint is pinned and a renewed certificate does not break the storage. The step is
+off by default, needs `proxmox` up (it fails with a hint otherwise), and can be repeated:
+it refreshes the storage definition and keeps the token.
 
 ## 14. Prior art and borrowed ideas
 

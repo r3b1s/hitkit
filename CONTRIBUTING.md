@@ -74,10 +74,11 @@ Baseline; it never runs on pull requests.
 ## Local CI
 
 The maintainer checks changes on a hitkit forge on their own desktop before pushing them
-to GitHub. `.forgejo/workflows/ci.yml` runs the unit tests, then three end-to-end jobs,
+to GitHub. `.forgejo/workflows/ci.yml` runs the unit tests, then five end-to-end jobs,
 each in a fresh Arch job VM: `.forgejo/scripts/nested-e2e.sh` runs `hitkit setup` and
 brings up kits *nested* in that VM (on `10.78.0.0/24`), then runs their tests from
-`tests/e2e`. One job tests the cache and forge kits, one NetBird, one Ludus. GitHub ignores `.forgejo/`. Forgejo runs only `.forgejo/workflows`
+`tests/e2e`. One job tests the cache and forge kits, one NetBird, one Ludus, one
+Proxmox Backup Server, and one Proxmox Backup Server added to Proxmox VE. GitHub ignores `.forgejo/`. Forgejo runs only `.forgejo/workflows`
 on a branch that has it; on a branch without it, Forgejo would try `.github/workflows`,
 and those jobs fail locally.
 

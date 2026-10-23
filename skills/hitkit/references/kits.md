@@ -56,6 +56,26 @@ wire it in. TLS uses the hitkit CA.
     | curl -sS --cacert ~/.local/share/hitkit/ca/ca.crt -K - https://proxmox.hitkit.internal:8006/api2/json/version
   ```
 
+## pbs
+
+- Machine `pbs`: Proxmox Backup Server 4 on Debian 13, with the datastore `data`
+  on the 100 GiB data disk. It is `stateful_os` (users, tokens and datastores live
+  on its OS disk): `upgrade` refuses, so update it in place. The web UI and API are
+  at `https://pbs.hitkit.internal:8007`.
+- `creds` keys: `url`, `username` (`root@pam`), `password`, `api_token`
+  (`root@pam!hitkit:<secret>`), `api_header` (`Authorization: PBSAPIToken=…`),
+  `datastore`, `repository` (for `proxmox-backup-client`: set `PBS_REPOSITORY` and
+  put the token secret in `PBS_PASSWORD`, never in argv) and `ssh`.
+- Knob `--proxmox`: add the datastore to the `proxmox` kit's Proxmox VE as backup
+  storage `pbs`, using a separate backup-only user. Needs `proxmox` up; re-run
+  `hitkit up pbs --proxmox` after bringing `proxmox` up later.
+- API example (header on stdin, as for `proxmox`):
+
+  ```sh
+  hitkit creds pbs --json | jq -r '"header = \"" + .api_header + "\""' \
+    | curl -sS --cacert ~/.local/share/hitkit/ca/ca.crt -K - https://pbs.hitkit.internal:8007/api2/json/version
+  ```
+
 ## ludus
 
 - Machine `ludus` (default 8 vCPU, 32 GiB, 250 GiB data): Proxmox VE 9 with

@@ -1,0 +1,2 @@
+enable proxmox-backup.service
+enable proxmox-backup-proxy.service

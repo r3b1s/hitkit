@@ -69,7 +69,8 @@ while IFS= read -r up && [ "$status" -eq 0 ]; do
     step "hitkit up $up"
     start=$(date +%s)
     # shellcheck disable=SC2086 # word splitting turns the spec into arguments
-    "$hitkit" up $up || status=$?
+    # stdin from /dev/null: ssh in the kits' hooks would otherwise eat the remaining ups.
+    "$hitkit" up $up </dev/null || status=$?
     echo "up ${up%% *}: exit $status after $(( $(date +%s) - start ))s"
     end
 done <<UPS
@@ -78,7 +79,8 @@ UPS
 
 if [ "$status" -eq 0 ]; then
     step "e2e tests"
-    HITKIT_E2E=1 .venv/bin/python -m pytest "$@" -v -rs || status=$?
+    # Every kit a job tests is up by now, so a test that finds its kit missing is a failure.
+    HITKIT_E2E=1 HITKIT_E2E_REQUIRE=1 .venv/bin/python -m pytest "$@" -v -rs || status=$?
     end
 fi
 

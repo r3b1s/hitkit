@@ -21,6 +21,14 @@ on:
         description: "e2e: Ludus kit"
         type: boolean
         default: true
+      pbs:
+        description: "e2e: Proxmox Backup Server kit"
+        type: boolean
+        default: true
+      pbs-proxmox:
+        description: "e2e: Proxmox Backup Server added to Proxmox VE as storage"
+        type: boolean
+        default: true
 
 jobs:
   unit:
@@ -92,3 +100,45 @@ jobs:
           .forgejo/scripts/nested-e2e.sh
           'ludus --memory ludus=12288 --cpus ludus=4'
           -- tests/e2e/test_kits.py -k ludus
+
+  # Builds the pbs image and checks provisioning: the pinned PBS version answers, the
+  # datastore and API token exist.
+  e2e-pbs:
+    needs: unit
+    if: github.event_name == 'push' || inputs.pbs
+    runs-on: arch
+    timeout-minutes: 60
+    steps:
+      # The VM's root partition is small; everything hitkit keeps goes to the data disk.
+      - name: Home directories on the data disk
+        run: |
+          for d in .cache .config .local; do
+            mkdir -p "/srv/data/runner/home/$d"
+            ln -sfn "/srv/data/runner/home/$d" "$HOME/$d"
+          done
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Nested Proxmox Backup Server and its e2e tests
+        run: .forgejo/scripts/nested-e2e.sh pbs -- tests/e2e/test_kits.py -k test_pbs_runs
+
+  # The same, with Proxmox VE alongside: `up pbs --proxmox` must leave an active `pbs`
+  # storage on it. Smaller than the kit's default (4 vCPU, 8 GiB); storage needs no guests.
+  e2e-pbs-proxmox:
+    needs: unit
+    if: github.event_name == 'push' || inputs.pbs-proxmox
+    runs-on: arch
+    timeout-minutes: 120
+    steps:
+      # The VM's root partition is small; everything hitkit keeps goes to the data disk.
+      - name: Home directories on the data disk
+        run: |
+          for d in .cache .config .local; do
+            mkdir -p "/srv/data/runner/home/$d"
+            ln -sfn "/srv/data/runner/home/$d" "$HOME/$d"
+          done
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Nested Proxmox VE and Backup Server, and their e2e tests
+        run: >-
+          .forgejo/scripts/nested-e2e.sh
+          'proxmox --memory proxmox=4096 --cpus proxmox=2'
+          'pbs --proxmox'
+          -- tests/e2e/test_kits.py -k pbs
