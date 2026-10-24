@@ -1,0 +1,18 @@
+#!/bin/sh
+# Proxmox Backup Server wants its own name to resolve locally, a postfix that knows its
+# hostname, and a root password for the web UI (root@pam).
+set -eu
+c="$CREDENTIALS_DIRECTORY"
+get() { sed -n "s/^$1=//p" "$c/hitkit.network"; }
+addr=$(get Address); domain=$(get Domains)
+name=$(cat /proc/sys/kernel/hostname)  # systemd set it from the system.hostname credential
+cat > /etc/hosts <<H
+127.0.0.1 localhost
+${addr%/*} $name.$domain $name
+H
+# postfix's main.cf was generated at build time, before the hostname existed.
+postconf -e "myhostname=$name.$domain" "mydestination=$name.$domain, $name, localhost.localdomain, localhost"
+postfix set-permissions >/dev/null 2>&1 || true
+if [ -f "$c/hitkit.pbs.root-password" ]; then
+    printf 'root:%s\n' "$(cat "$c/hitkit.pbs.root-password")" | chpasswd
+fi

@@ -6,7 +6,7 @@ libvirt VMs on your own Linux workstation, with every credential generated and
 brokered for you.
 
 Status: MVP plus the first post-MVP phases: a forge with CI (persistent and
-single-use job VMs), Renovate, pull-through caches, Proxmox, push mirrors, git
+single-use job VMs), Renovate, pull-through caches, Proxmox VE and Backup Server, push mirrors, git
 over SSH and in-place upgrades. Supported hosts: Arch/CachyOS, Debian 13 and
 Fedora 44. See [docs/design.md](docs/design.md).
 
@@ -80,11 +80,13 @@ that agent harnesses supporting the format load on demand.
 - `hitkit-troubleshoot`: traces, doctor and readiness gates.
 
 ```sh
-hitkit skills                                  # list them (they live in src/hitkit/skills)
-hitkit skills --install ~/.claude/skills       # or whichever skills directory your harness reads
+hitkit skills                                  # list them (they live in skills/, also installable with `npx skills`)
+hitkit skills print hitkit                      # show one skill's SKILL.md
+hitkit skills install                          # into ./.agents/skills (asks before creating ./.agents)
+hitkit skills install ~/.claude/skills          # or whichever skills directory your harness reads
 ```
 
-Re-running `--install` refreshes the copies.
+Re-running `install` refreshes the copies.
 
 ### A local forge with CI and Renovate
 
@@ -121,7 +123,15 @@ hitkit up proxmox                  # Proxmox VE 9, nested KVM, data disk as `dat
 hitkit creds proxmox               # web UI URL, root@pam password, API token and header
 ```
 
-Proxmox and Ludus keep system state on their OS disk, so `hitkit upgrade` leaves them
+### Proxmox Backup Server
+
+```sh
+hitkit up pbs                      # Proxmox Backup Server 4, datastore `data` on the data disk
+hitkit creds pbs                   # web UI URL, root@pam password, API token, PBS_REPOSITORY
+hitkit up pbs --proxmox            # also add it to the proxmox kit's Proxmox VE as backup storage `pbs`
+```
+
+Proxmox, Proxmox Backup Server and Ludus keep system state on their OS disk, so `hitkit upgrade` leaves them
 alone (update them in place with apt); backups include the OS disk.
 
 ### Ludus cyber ranges

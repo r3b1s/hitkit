@@ -74,7 +74,7 @@ Each guest runs readiness gates in order, then prints `HITKIT-READY` or
 | `kvm` (dev kits) | `/dev/kvm` in the guest | nested virtualization is off on the host (`doctor`) |
 | `forgejo`, `forgejo-ssh` | Forgejo is healthy over HTTPS, and SSH on port 2222 | bootstrap failed; console tail |
 | `docker`, `runner` | Docker is up and the runner is registered | Forgejo unreachable from the runner |
-| `caches`, `proxmox` | the kit's services | console tail |
+| `caches`, `proxmox`, `pbs` | the kit's services (for `pbs`: proxmox-backup and proxmox-backup-proxy answer on 8007) | console tail |
 | `ludus` | the first-boot install finished and the API answers | install failed; see the `ludus` row in section 4 |
 | `netbird` | NetBird's server and dashboard answer over HTTPS through Traefik | image pull failed (no internet) or a container exits; `hitkit ssh netbird -- journalctl -u netbird -b`, then `docker compose -f /usr/lib/hitkit/netbird/compose.yml ps` |
 
@@ -118,7 +118,7 @@ at `~/.local/share/hitkit/vms/<machine>/console.failed.log`.
 2. `hitkit down <kit>`, then `hitkit up <kit>`.
 3. `hitkit upgrade <kit>` if `status` shows the machine as outdated.
 4. `hitkit destroy <kit> --yes`, then `hitkit up <kit>`. This recreates the
-   machines and reuses the kept data disks and secrets (and, for `proxmox` or
+   machines and reuses the kept data disks and secrets (and, for `proxmox`, `pbs` or
    `ludus`, the OS disk). **Ask the user first.**
 5. `hitkit restore <kit> --yes` from the newest backup (`hitkit backup --list`).
    Current data is moved aside, not deleted. **Ask the user first.**

@@ -1,0 +1,15 @@
+#!/bin/sh
+set -e
+# The enterprise repository needs a subscription (apt update fails with 401 otherwise):
+# keep it, disabled, so it can be re-enabled once a subscription key is added.
+cat > /etc/apt/sources.list.d/pbs-enterprise.sources <<SOURCES
+Types: deb
+URIs: https://enterprise.proxmox.com/debian/pbs
+Suites: trixie
+Components: pbs-enterprise
+Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg
+Enabled: false
+SOURCES
+# apt is installed (for updates in place), so mkosi writes its own build-time Debian
+# sources next to base's debian.sources: the same repositories twice, with deb-src.
+rm -f /etc/apt/sources.list.d/trixie.sources

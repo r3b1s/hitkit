@@ -15,8 +15,8 @@ from hitkit.host.ca import create_ca
 from hitkit.machine import creds
 
 SUBNET = parse_subnet("10.77.0.0/24")
-MAC = "52:54:00:68:00:28"
-IP = ipaddress.IPv4Address("10.77.0.40")
+MAC = "52:54:00:68:00:0e"
+IP = ipaddress.IPv4Address("10.77.0.14")
 CLIENT_PUB = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIClient hitkit"
 
 
@@ -44,7 +44,7 @@ def test_ensure_client_key_creates_private_key_and_is_idempotent(user):
 def test_network_unit_contents():
     unit = creds.network_unit(MAC, IP, SUBNET)
     assert f"MACAddress={MAC}" in unit
-    assert "Address=10.77.0.40/24" in unit
+    assert "Address=10.77.0.14/24" in unit
     assert "Gateway=10.77.0.1" in unit
     assert "DNS=10.77.0.1" in unit
     assert "Domains=hitkit.internal" in unit
@@ -68,7 +68,7 @@ def test_build_returns_expected_files_and_known_hosts():
     assert files["hitkit.authorized-keys"].decode() == f"{CLIENT_PUB}\n"
     assert files["hitkit.ca.crt"] == ca.cert_pem
 
-    assert result.known_hosts.startswith("devbox.hitkit.internal,devbox,10.77.0.40 ssh-ed25519 ")
+    assert result.known_hosts.startswith("devbox.hitkit.internal,devbox,10.77.0.14 ssh-ed25519 ")
     host_pub = result.known_hosts.split(" ", 1)[1].strip()
     assert host_pub.startswith("ssh-ed25519 ")
 
@@ -115,8 +115,8 @@ def test_credential_names_fit_qemu_fw_cfg_limit(tmp_path):
 
     subnet = parse_subnet("10.77.0.0/24")
     ca = create_ca(subnet, "a" * 32)
-    ok = creds_mod.build("devbox", subnet, "52:54:00:68:00:28", ca, "ssh-ed25519 AAAA test")
+    ok = creds_mod.build("devbox", subnet, "52:54:00:68:00:0e", ca, "ssh-ed25519 AAAA test")
     assert all(len(n) <= creds_mod.MAX_NAME for n in ok.files)
     with pytest.raises(ValueError):
-        creds_mod.build("devbox", subnet, "52:54:00:68:00:28", ca, "ssh-ed25519 AAAA test",
+        creds_mod.build("devbox", subnet, "52:54:00:68:00:0e", ca, "ssh-ed25519 AAAA test",
                         {"hitkit.forgejo.admin-password": b"x"})

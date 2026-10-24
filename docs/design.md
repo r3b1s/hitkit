@@ -219,13 +219,20 @@ setup time. hitkit never needs root again to register a new VM.
 | `.2`–`.9` | — | Reserved |
 | `.10` | `forgejo.hitkit.internal` | Forge |
 | `.20`–`.29` | `runner-N.hitkit.internal` | Persistent runners |
-| `.30` | `proxmox.hitkit.internal` | Roadmap |
-| `.40` | `devbox.hitkit.internal` | `devbox` kit: plain Debian VM |
-| `.50` | `dev.hitkit.internal` | `hitkit-dev` kit: Arch VM for developing hitkit (nested) |
-| `.100`–`.199` | `ci-N.hitkit.internal` | Roadmap: ephemeral runner pool |
-| `.200`–`.250` | — | DHCP range for ad-hoc, non-hitkit VMs |
+| `.11` | `proxmox.hitkit.internal` | `proxmox` kit |
+| `.12` | `pbs.hitkit.internal` | `pbs` kit |
+| `.13` | `ludus.hitkit.internal` | `ludus` kit |
+| `.14` | `devbox.hitkit.internal` | `devbox` kit: plain Debian VM |
+| `.15`–`.17` | `dev`, `dev-debian`, `dev-fedora` | `hitkit-dev` kits: VMs for developing hitkit (nested) |
+| `.18` | `cache.hitkit.internal` | `cache` kit |
+| `.19` | `netbird.hitkit.internal` | `netbird` kit |
+| `.30`–`.99` | — | Static addresses for your own guests; hitkit never uses them |
+| `.100`–`.199` | — | DHCP pool for ad-hoc, non-hitkit VMs |
+| `.200`–`.254` | `ci-N.hitkit.internal` | Overflow for hitkit's own addresses: the ephemeral runner pool (`ci-1`–`ci-55`; the last is reserved for template builds) |
 
-Guests receive static addresses. DNS names are a convenience layered on top.
+`.1`–`.29` is hitkit's: kits get their slots there. Guests that hitkit does not
+manage receive static addresses from `.30`–`.99` or DHCP leases from the pool. DNS
+names are a convenience layered on top.
 
 ### 7.3 Certificate authority
 
@@ -415,13 +422,14 @@ Kits are curated and shipped with hitkit. There is no external kit loading.
 
 | Kit | Machines | Purpose |
 |---|---|---|
-| `devbox` | `devbox` (.40): Debian 13, 2 vCPU, 2 GiB, 20 GiB data | Plain VM with SSH; the base every kit builds on |
-| `hitkit-dev` | `dev` (.50): Arch Linux, 4 vCPU, 8 GiB, 80 GiB data | Dogfooding: develop and test hitkit inside hitkit. It ships the full host toolchain (libvirt, QEMU, mkosi, Debian bootstrap tools, Python/uv), a passwordless-sudo `dev` user whose home is on the data disk, and a nested hitkit config on `10.78.0.0/24` so the nested network cannot collide with the VM's own uplink. Requires nested virtualization; its `kvm` readiness gate checks for it. |
-| `hitkit-dev-debian`, `hitkit-dev-fedora` | `dev-debian` (.51), `dev-fedora` (.52) | The same, on Debian 13 and Fedora 44: how hitkit's Debian/Fedora host support is tested (§13.9) |
-| `forge` | `forgejo` (.10), `runner-N` (.20–.29), `ci-N` job VMs (.100–.199) | Forgejo, CI runners, the ephemeral pool, Renovate (§9.3, §13.1) |
-| `cache` | `cache` (.60): 2 vCPU, 2 GiB, 100 GiB data | Pull-through caches (§13.3) |
-| `proxmox` | `proxmox` (.30): 4 vCPU, 8 GiB, 100 GiB data | Proxmox VE 9 with API token (§13.4) |
-| `ludus` | `ludus` (.31): 8 vCPU, 32 GiB, 250 GiB data | Ludus 2.3.8 cyber ranges on Proxmox VE 9 (§13.14) |
+| `devbox` | `devbox` (.14): Debian 13, 2 vCPU, 2 GiB, 20 GiB data | Plain VM with SSH; the base every kit builds on |
+| `hitkit-dev` | `dev` (.15): Arch Linux, 4 vCPU, 8 GiB, 80 GiB data | Dogfooding: develop and test hitkit inside hitkit. It ships the full host toolchain (libvirt, QEMU, mkosi, Debian bootstrap tools, Python/uv), a passwordless-sudo `dev` user whose home is on the data disk, and a nested hitkit config on `10.78.0.0/24` so the nested network cannot collide with the VM's own uplink. Requires nested virtualization; its `kvm` readiness gate checks for it. |
+| `hitkit-dev-debian`, `hitkit-dev-fedora` | `dev-debian` (.16), `dev-fedora` (.17) | The same, on Debian 13 and Fedora 44: how hitkit's Debian/Fedora host support is tested (§13.9) |
+| `forge` | `forgejo` (.10), `runner-N` (.20–.29), `ci-N` job VMs (.200–.254) | Forgejo, CI runners, the ephemeral pool, Renovate (§9.3, §13.1) |
+| `cache` | `cache` (.18): 2 vCPU, 2 GiB, 100 GiB data | Pull-through caches (§13.3) |
+| `proxmox` | `proxmox` (.11): 4 vCPU, 8 GiB, 100 GiB data | Proxmox VE 9 with API token (§13.4) |
+| `pbs` | `pbs` (.12): 2 vCPU, 4 GiB, 100 GiB data | Proxmox Backup Server 4 with a datastore and API token, optionally added to `proxmox` as backup storage (§13.16) |
+| `ludus` | `ludus` (.13): 8 vCPU, 32 GiB, 250 GiB data | Ludus 2.3.8 cyber ranges on Proxmox VE 9 (§13.14) |
 
 ### 9.3 MVP kit: `forge`
 
@@ -559,7 +567,7 @@ Conventions:
 | `hitkit mirror add\|list\|sync\|remove` | Push mirrors to GitHub/GitLab/any remote (§13.5) |
 | `hitkit pool run\|status` | The ephemeral runner pool's loop (run by `hitkit-pool.service`) and its state (§13.1) |
 | `hitkit trace [<id>\|last] [--failed]` | Recorded traces: recent invocations, or every record of one (§13.11) |
-| `hitkit skills [--install DIR]` | Agent skills for using hitkit (§13.12) |
+| `hitkit skills [install [DIR]\|print NAME]` | Agent skills for using hitkit: list, install, show one (§13.12) |
 
 ## 11. Roadmap
 
@@ -859,8 +867,8 @@ without re-running it with extra flags.
 ### 13.12 Agent skills
 
 hitkit is agent-first, so it ships its own operating instructions as
-[Agent Skills](https://agentskills.io) (`src/hitkit/skills/<name>/SKILL.md`,
-packaged in the wheel). They are harness-agnostic: plain Markdown with
+[Agent Skills](https://agentskills.io) (`skills/<name>/SKILL.md` at the repository root,
+where `npx skills` finds them; the wheel bundles them as `hitkit/skills` at build time). They are harness-agnostic: plain Markdown with
 `name`/`description` front matter, loaded on demand by any harness that
 supports the format.
 
@@ -870,9 +878,12 @@ supports the format.
 | `hitkit-forge` | Scoped tokens, the API, git over SSH or HTTPS without leaking tokens, CI labels and job environment, dispatching and watching runs, grants, mirrors |
 | `hitkit-troubleshoot` | Reading traces (§13.11), doctor, readiness gates, a table of common errors, recovery moves from least to most invasive |
 
-`hitkit skills` lists them, and `hitkit skills --install DIR` copies them into a
-harness's skills directory. It replaces only earlier copies of the same
-skills. Unit tests keep the skills honest: spec-valid front matter, resolvable
+`hitkit skills` lists them, `hitkit skills print NAME` prints one `SKILL.md`, and
+`hitkit skills install [DIR]` copies them into a harness's skills directory. Without
+`DIR` it installs into `.agents/skills` of the current directory, asking before it
+creates `.agents` (`--yes` skips the question). It replaces only earlier copies of
+the same skills. A source checkout, editable installs included, reads `skills/`
+directly. Unit tests keep the skills honest: spec-valid front matter, resolvable
 links, and every `hitkit …` command they show must exist in the CLI. The forge
 skill bundles two standard-library scripts. `forge_api.py` makes API calls with
 the token read from a 0600 file, never from argv. `run_workflow.py` dispatches
@@ -1136,6 +1147,31 @@ Verified end to end:
 - `sudo pacman -S` works, and so does `actions/checkout` over verified TLS.
 - Node 26, Python 3.14, Docker 29 and `docker run` all work.
 - A package baked in through the list runs without installing.
+
+### 13.16 `pbs` kit (`https://pbs.hitkit.internal:8007`)
+
+Proxmox Backup Server 4 is installed on Debian 13 the documented "install on Debian"
+way ([docs](https://pbs.proxmox.com/docs/installation.html)), on top of the base
+image: Debian's kernel and hitkit's systemd-networkd stay, unlike `proxmox`. The server
+and the keyring package are pinned from the no-subscription repository (same release
+key as the Proxmox VE one); the enterprise repository is kept, disabled. The
+configuration (users, tokens, datastores, certificates) lives in `/etc/proxmox-backup`
+on the OS disk, so the machine is `stateful_os`.
+
+hitkit generates the root password, installs the hitkit CA leaf as
+`proxy.pem`/`proxy.key` on proxmox-backup-proxy, creates the datastore `data` at
+`/srv/data/pbs` on the data disk, and mints `root@pam!hitkit` with the `Admin` role.
+`hitkit creds pbs` prints the URL, login, token, ready-made `PBSAPIToken` header and
+the `PBS_REPOSITORY` string for `proxmox-backup-client`.
+
+`hitkit up pbs --proxmox` also adds the datastore to the `proxmox` kit's Proxmox VE as
+backup storage `pbs`. It creates a separate user `pve@pbs` with its own token and the
+`DatastorePowerUser` role on `/datastore/data` only, so Proxmox VE can back up, restore
+and prune but is not a PBS admin, and hands the token secret to `pvesm` on stdin.
+Proxmox VE verifies the server through the hitkit CA it already trusts, so no
+fingerprint is pinned and a renewed certificate does not break the storage. The step is
+off by default, needs `proxmox` up (it fails with a hint otherwise), and can be repeated:
+it refreshes the storage definition and keeps the token.
 
 ## 14. Prior art and borrowed ideas
 

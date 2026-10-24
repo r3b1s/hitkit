@@ -2,7 +2,7 @@
 
     HITKIT_E2E=1 uv run pytest tests/e2e/test_kits.py -v
 
-Each test skips unless its kit is up (`hitkit up netbird`, `hitkit up ludus`). They
+Each test skips unless its kit is up (`hitkit up netbird`, `hitkit up ludus`, `hitkit up pbs`). They
 check that the kit works and runs the version this checkout pins, so they are the
 test for a version bump.
 """
@@ -31,10 +31,18 @@ def hitkit(*args: str):
     return json.loads(subprocess.run(HITKIT + ["--json", *args], capture_output=True, text=True, check=True).stdout)
 
 
+def unmet(reason: str) -> None:
+    """Skip locally; in local CI (HITKIT_E2E_REQUIRE=1), where the kits under test were just
+    brought up, a missing one is a failure, not a pass."""
+    if os.environ.get("HITKIT_E2E_REQUIRE") == "1":
+        pytest.fail(reason)
+    pytest.skip(reason)
+
+
 def require_kit(name: str) -> None:
     machines = [m for m in hitkit("status") if m["kit"] == name]
     if not machines or any(m["state"] != "running" for m in machines):
-        pytest.skip(f"{name} kit not up")
+        unmet(f"{name} kit not up")
 
 
 def call(url: str, headers: dict[str, str]):
@@ -94,3 +102,29 @@ def test_ludus_runs_the_pinned_version_and_its_api_works():
     assert pinned in version["version"], version
     me = call(f"{creds['url']}/api/v2/whoami", key)
     assert creds["user_id"] in json.dumps(me), me
+
+
+# --- pbs -----------------------------------------------------------------------
+
+
+def test_pbs_runs_the_pinned_version_and_its_api_works():
+    require_kit("pbs")
+    pinned = re.search(r"proxmox-backup-server=(\d+\.\d+\.\d+)", (IMAGES / "pbs" / "mkosi.conf").read_text()).group(1)
+    creds = hitkit("creds", "pbs")
+    header = dict([creds["api_header"].split(": ", 1)])
+
+    version = call(f"{creds['url']}/api2/json/version", header)["data"]  # {"version": "4.2", "release": "8"}
+    assert f"{version['version']}.{version['release']}" == pinned
+    stores = call(f"{creds['url']}/api2/json/admin/datastore", header)["data"]
+    assert "data" in [s["store"] for s in stores], stores
+
+
+def test_pbs_storage_on_proxmox_when_wired():
+    require_kit("pbs")
+    require_kit("proxmox")
+    pve = hitkit("creds", "proxmox")
+    storages = call(f"{pve['url']}/api2/json/storage", dict([pve["api_header"].split(": ", 1)]))["data"]
+    if "pbs" not in [s["storage"] for s in storages]:
+        unmet("pbs not wired to proxmox (`hitkit up pbs --proxmox`)")
+    status = call(f"{pve['url']}/api2/json/nodes/proxmox/storage/pbs/status", dict([pve["api_header"].split(": ", 1)]))
+    assert status["data"]["active"] == 1, status

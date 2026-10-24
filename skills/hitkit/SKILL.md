@@ -1,6 +1,6 @@
 ---
 name: hitkit
-description: Provision and operate local self-hosted dev infrastructure (VMs) with the hitkit CLI - a Forgejo forge with CI runners, pull-through caches, Proxmox VE, Ludus cyber ranges, a NetBird management server, plain Debian devboxes, and hitkit development VMs on this Linux workstation. Use when the user mentions hitkit, *.hitkit.internal hosts, or wants a local forge, CI runner, package cache, Proxmox, Ludus, NetBird server, or a throwaway VM; covers bringing kits up and down, status, SSH, credentials, sizing knobs, upgrades and cleanup.
+description: Provision and operate local self-hosted dev infrastructure (VMs) with the hitkit CLI - a Forgejo forge with CI runners, pull-through caches, Proxmox VE, Proxmox Backup Server, Ludus cyber ranges, a NetBird management server, plain Debian devboxes, and hitkit development VMs on this Linux workstation. Use when the user mentions hitkit, *.hitkit.internal hosts, or wants a local forge, CI runner, package cache, Proxmox, Ludus, NetBird server, or a throwaway VM; covers bringing kits up and down, status, SSH, credentials, sizing knobs, upgrades and cleanup.
 compatibility: Linux host where `sudo hitkit setup` has been run (libvirt, QEMU/KVM, mkosi). Needs a shell; no network beyond the host.
 ---
 
@@ -69,6 +69,7 @@ before you diagnose anything.
 | `forge` | `forgejo`, `runner-1`… | A Forgejo forge, CI runners and Renovate (see `hitkit-forge`) |
 | `cache` | `cache` | Pull-through caches for Docker Hub, ghcr.io, PyPI, npm and apt |
 | `proxmox` | `proxmox` | Proxmox VE 9 with an API token, for testing Proxmox tooling |
+| `pbs` | `pbs` | Proxmox Backup Server 4 with a datastore and API token, optionally wired into `proxmox` as backup storage |
 | `ludus` | `ludus` | Ludus cyber ranges on Proxmox VE 9, with an admin API key |
 | `netbird` | `netbird` | A NetBird management server with an API token and setup key, for testing NetBird tooling |
 | `hitkit-dev` (`-debian`, `-fedora`) | `dev` (`dev-debian`, `dev-fedora`) | Developing hitkit itself, with nested KVM |
@@ -93,7 +94,7 @@ hitkit upgrade forge                  # move onto current images; keeps data; ro
   `~/.local/share/hitkit/vms/.kept/` and reused by the next `up`. `status`
   and `gc` list them.
 - Data disks only grow; asking for a smaller `--disk` is refused.
-- `proxmox` and `ludus` are `stateful_os`: `upgrade` refuses them (update in
+- `proxmox`, `pbs` and `ludus` are `stateful_os`: `upgrade` refuses them (update in
   place), and their OS disk is kept and backed up too.
 
 **Backups.**

@@ -1,0 +1,8 @@
+# Proxmox Backup Server no-subscription repository, enabled by default so the machine can
+# be updated in place without a subscription. The enterprise one is in
+# pbs-enterprise.sources, disabled.
+Types: deb
+URIs: http://download.proxmox.com/debian/pbs
+Suites: trixie
+Components: pbs-no-subscription
+Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg

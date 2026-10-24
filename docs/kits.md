@@ -128,10 +128,13 @@ slots += [Slot("cache", 60)]
 The slot fixes the static address (`10.77.0.<octet>` on the default subnet), the DNS
 name `<name>.hitkit.internal`, and the MAC address.
 
-Pick an unused octet. In use: `1` host, `10` forgejo, `20`-`29` runner-1 to runner-10,
-`30` proxmox, `31` ludus, `40` devbox, `50` dev, `51` dev-debian, `52` dev-fedora, `60`
-cache, `70` netbird, `100`-`199` ci-1 to ci-100. Octets `2`-`9` are reserved and `200`-`250` are the
-DHCP range (`docs/design.md` section 7.2).
+Pick an unused octet below `30`: hitkit's own addresses are `.1`-`.29`. In use: `1`
+host, `10` forgejo, `11` proxmox, `12` pbs, `13` ludus, `14` devbox, `15` dev, `16`
+dev-debian, `17` dev-fedora, `18` cache, `19` netbird, `20`-`29` runner-1 to runner-10.
+Octets `2`-`9` are free for new kits. The rest of the subnet is not hitkit's:
+`30`-`99` are static addresses for your own guests, `100`-`199` the DHCP pool, and
+`200`-`254` the overflow that holds the job pool's ci-1 to ci-55 (`docs/design.md`
+section 7.2).
 
 After adding a slot, run `sudo hitkit setup`. It needs root, is idempotent, and rewrites
 the DNS records on hitkit's libvirt network (applied live) and the hitkit block in

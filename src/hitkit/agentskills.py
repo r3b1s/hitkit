@@ -1,7 +1,12 @@
 """Agent skills shipped with hitkit (the open Agent Skills format: <name>/SKILL.md).
 
-`hitkit skills` lists them; `hitkit skills --install DIR` copies them into the
-skills directory of whichever agent harness the user runs.
+`hitkit skills` lists them, `hitkit skills print NAME` shows one, and
+`hitkit skills install [DIR]` copies them into the skills directory of whichever
+agent harness the user runs.
+
+The skills live in `skills/` at the repository root, where `npx skills` finds them.
+The wheel bundles that directory as `hitkit/skills` at build time (pyproject.toml),
+so a source checkout, including an editable install, reads the repository's own copy.
 """
 
 from __future__ import annotations
@@ -10,9 +15,19 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from hitkit.errors import Conflict
+from hitkit.errors import Conflict, HitkitError
 
-SKILLS_DIR = Path(__file__).resolve().parent / "skills"
+
+
+def _skills_dir() -> Path:
+    package = Path(__file__).resolve().parent
+    for candidate in (package / "skills", package.parents[1] / "skills"):  # wheel, then checkout
+        if candidate.is_dir():
+            return candidate
+    return package / "skills"
+
+
+SKILLS_DIR = _skills_dir()
 
 
 @dataclass(frozen=True)
@@ -43,6 +58,15 @@ def available(root: Path = SKILLS_DIR) -> list[Skill]:
         meta = frontmatter(skill_md.read_text())
         skills.append(Skill(meta.get("name", ""), meta.get("description", ""), skill_md.parent))
     return skills
+
+
+def find(name: str, root: Path = SKILLS_DIR) -> Skill:
+    skills = available(root)
+    for skill in skills:
+        if skill.name == name:
+            return skill
+    raise HitkitError(f"no bundled skill named {name!r}",
+                      hint=f"available: {', '.join(s.name for s in skills) or 'none'}")
 
 
 def install(dest: Path, root: Path = SKILLS_DIR) -> list[Path]:
