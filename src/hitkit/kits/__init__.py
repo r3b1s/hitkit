@@ -176,6 +176,20 @@ class Hooks:
         """Extra credentials (name -> content) for a machine, merged into the common set."""
         return {}
 
+    def seed(self, hctx, machine: MachineSpec, plan: tuple[MachineSpec, ...]) -> dict[str, dict]:
+        """Installer roles: the install seed (section -> content), asked for only when a
+        fresh install starts."""
+        raise HitkitError(f"kit {machine.kit!r} has an installer role but no seed")
+
+    def probe_ready(self, hctx, machine: MachineSpec) -> str | None:
+        """Installer roles: None when the machine is ready, otherwise why not. Polled until
+        it passes, after every boot."""
+        raise HitkitError(f"kit {machine.kit!r} has an installer role but no readiness probe")
+
+    def next_steps(self, hctx, plan: tuple[MachineSpec, ...]) -> list[str]:
+        """Replaces the generic 'Next: hitkit creds ... hitkit ssh ...' lines after up."""
+        return []
+
     def after_ready(self, hctx, machine: MachineSpec, plan: tuple[MachineSpec, ...], knobs: dict, log) -> None:
         """Called after each machine reports ready, in kit order."""
 
@@ -186,12 +200,27 @@ class Hooks:
         """Human-facing URLs and logins for `hitkit creds`."""
         return {}
 
+    def browser_certificate(self, hctx) -> dict | None:
+        """For `hitkit browser-cert`: the client certificate a browser logs in with, as
+        {"bundle": PKCS#12 Path, "password", "nickname" (its friendly name), "certificate" PEM},
+        or None if the kit has none."""
+        return None
+
     def backup_plan(self, machine):
         """How `hitkit backup` copies a machine's /srv/data (a MachineInfo); None skips it.
         Default: offline, i.e. the machine is stopped and its data disk copied exactly."""
         from hitkit.backup import BackupPlan
 
         return BackupPlan()
+
+
+def installer_hooks(hooks: Hooks, hctx, machine: MachineSpec, plan: tuple[MachineSpec, ...]) -> dict:
+    """The ``seed`` and ``probe`` the machine layer needs for an installer role (none for others)."""
+    from hitkit.machine import images
+
+    if not images.is_installer_role(machine.role):
+        return {}
+    return {"seed": lambda: hooks.seed(hctx, machine, plan), "probe": lambda: hooks.probe_ready(hctx, machine)}
 
 
 def parse(text: str) -> Kit:

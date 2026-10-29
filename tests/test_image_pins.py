@@ -151,3 +151,31 @@ def test_fetch_artifact_cleans_up_partial_download(user, monkeypatch):
     with pytest.raises(HitkitError):
         images.fetch_artifact(user, art, lambda m: None)
     assert not list((user.cache_dir / "downloads").glob("*"))
+
+
+# --- installer roles (plan §4.1, §9) ---------------------------------------
+
+
+def test_incus_os_role_dirs_is_just_incus_os():
+    assert images.role_dirs("incus-os") == [images.IMAGES_DIR / "incus-os"]
+
+
+def test_incus_os_pins_parse_as_installer_artifact():
+    arts = images.pinned_artifacts(images.role_dirs("incus-os"))
+    assert len(arts) == 1
+    art = arts[0]
+    assert art.name == "IncusOS"
+    assert art.version == "202610272235"
+    assert re.fullmatch(r"[0-9a-f]{64}", art.sha256)
+    assert "IncusOS_202610272235.img.gz" in art.url
+
+
+def test_changing_installer_toml_changes_config_hash(tmp_path):
+    role = tmp_path / "incus-os"
+    role.mkdir()
+    (role / "installer.toml").write_text('[installer]\nname = "IncusOS"\nversion = "1"\nurl = "https://x"\nsha256 = "aaa"\n')
+    before = images.config_hash([role])
+
+    (role / "installer.toml").write_text('[installer]\nname = "IncusOS"\nversion = "2"\nurl = "https://x"\nsha256 = "bbb"\n')
+    assert images.config_hash([role]) != before
+

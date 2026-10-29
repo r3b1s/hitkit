@@ -155,6 +155,7 @@ flowchart LR
 - Persistent runner VMs are long-lived (use the ephemeral pool for untrusted code).
 - Forgejo allows migrations and mirrors to private networks (`ALLOW_LOCALNETWORKS`). Guests already have NAT egress to the LAN, so this grants nothing new.
 - `hitkit up forge` edits `~/.ssh/config`, inserting a marked `Include` block that `destroy` removes.
+- **Trust on first use for the `incus-os` server certificate.** IncusOS generates its own self-signed server certificate (`CN=root@<hostname>`) during initialization. Because standalone Incus servers cannot present an externally-signed hitkit-CA certificate without clustering, hitkit contacts the server over the host-only bridge immediately after installation and pins the certificate as `server.crt`. Every subsequent connection validates this pin.
 
 ## 6. Architecture
 
@@ -216,7 +217,8 @@ setup time. hitkit never needs root again to register a new VM.
 | Address | Name | Purpose |
 |---|---|---|
 | `.1` | `host.hitkit.internal` | Host side of `hitkit0`; dnsmasq |
-| `.2`–`.9` | — | Reserved |
+| `.2` | `incus-os.hitkit.internal` | `incus-os` kit |
+| `.3`–`.9` | — | Reserved |
 | `.10` | `forgejo.hitkit.internal` | Forge |
 | `.20`–`.29` | `runner-N.hitkit.internal` | Persistent runners |
 | `.11` | `proxmox.hitkit.internal` | `proxmox` kit |
@@ -308,6 +310,7 @@ versions move only through deliberate, reviewed bumps to the pins.
 | Docker Engine | Docker's official apt repository (`docker-ce`), not Debian's older `docker.io` | Version in the mkosi profile; repository key pinned |
 | Renovate | Container image used by the scheduled workflow | Image tag + digest |
 | Job images (`ubuntu-latest`, …) | Container registry | Image tag + digest in the runner config |
+| IncusOS | `https://images.linuxcontainers.org/os/index.json` (stable channel) | Version + SHA-256 in `installer.toml` |
 
 - **Versions are recorded** in an image manifest beside the qcow2 and copied
   into domain metadata (§8.4). `hitkit status` therefore shows exactly what each
@@ -1172,6 +1175,38 @@ Proxmox VE verifies the server through the hitkit CA it already trusts, so no
 fingerprint is pinned and a renewed certificate does not break the storage. The step is
 off by default, needs `proxmox` up (it fails with a hint otherwise), and can be repeated:
 it refreshes the storage definition and keeps the token.
+
+### 13.17 `incus-os` kit (`https://incus-os.hitkit.internal:8443`)
+
+IncusOS ([docs](https://linuxcontainers.org/incus-os/)) is an immutable appliance
+operating system designed specifically to run Incus. Unlike standard hitkit roles built
+with mkosi, IncusOS is cryptographically signed upstream (including UKIs, signed `/usr`
+dm-verity, and Secure Boot enrollment) and performs its own automated updates in place.
+
+- **Installer-machine architecture:** The kit uses hitkit's installer-machine flow.
+  `images/incus-os/installer.toml` pins the upstream install image by version and sha256
+  from `https://images.linuxcontainers.org/os/index.json`. hitkit provisions a 16 MiB FAT
+  `SEED_DATA` drive containing `<section>.json` configuration files (network slot assignment,
+  hitkit CA trust, and initial trusted client certificates).
+- **Single disk and stateful OS:** IncusOS installs to a single disk (`data.qcow2` with serial
+  `hitkit-data`). Because the OS is stateful and self-updating, `stateful_os = true` is set,
+  and `--disk` sizes the whole disk. Additional disk space expands the `local` ZFS storage
+  pool automatically on the next reboot.
+- **TPM and NVRAM durability:** IncusOS seals LUKS disk encryption keys to a virtual TPM 2.0
+  emulator measured against Secure Boot NVRAM. hitkit preserves `nvram.fd` and `tpm/` emulator
+  state across VM destruction in a `<name>-data.state/` sidecar, restores them on subsequent
+  bringup, and bundles them into offline backups (`<name>.data.state.tar`). Disk recovery keys
+  are retrieved via the IncusOS security API on first boot and stored in `secrets/incus-os/`.
+- **Standalone server & trust on first use:** Standalone Incus servers cannot present an
+  externally signed certificate without clustering. hitkit uses trust-on-first-use over the
+  isolated `hitkit0` host-only bridge to pin the server's self-signed TLS certificate as
+  `server.crt`, verifying this pin on every subsequent connection.
+- **Remote setup and Web UI:** hitkit issues an Incus trust token with a clean DNS address
+  (`incus-os.hitkit.internal:8443`), allowing immediate setup via
+  `incus remote add hitkit-incus-os <token>`. Web UI authentication uses a generated PKCS#12
+  browser certificate bundle (`browser.p12`) delivered via `hitkit creds incus-os`. IncusOS
+  has no interactive shell or SSH daemon; management occurs entirely through `incus` CLI,
+  `incus admin os`, or the Incus web UI.
 
 ## 14. Prior art and borrowed ideas
 

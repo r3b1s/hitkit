@@ -136,7 +136,100 @@ def test_machine_paths_file_names_under_root(tmp_path):
     assert paths.creds_dir == tmp_path / "creds"
     assert paths.known_hosts == tmp_path / "known_hosts"
     assert paths.console_log == tmp_path / "console.log"
+    assert paths.install_disk == tmp_path / "install.qcow2"
+    assert paths.seed_img == tmp_path / "seed.img"
+    assert paths.tpm_dir == tmp_path / "tpm"
 
 
 def test_machine_paths_for_machine_nests_under_vms_dir(tmp_path):
     assert MachinePaths.for_machine(tmp_path, "devbox").root == tmp_path / "devbox"
+
+
+# --- installer domain XML (plan §4.2, §9) -----------------------------------
+
+
+@pytest.fixture
+def installer_spec() -> MachineSpec:
+    return MachineSpec(
+        name="incus-os", role="incus-os", cpus=4, memory_mib=8192, data_disk_gib=150,
+        kit="incus-os", kit_version=1, stateful_os=True, ready_timeout=600,
+    )
+
+
+@pytest.fixture
+def installer_meta() -> MachineMeta:
+    return MachineMeta(
+        install_id="install-abc", kit="incus-os", kit_version=1, machine="incus-os",
+        role="incus-os", image="incus-os-0123456789ab", address="10.77.0.2",
+        created="2026-10-29T00:00:00Z", versions={"incus-os": "202610272235"},
+    )
+
+
+def test_installer_domain_xml_features_and_devices(installer_spec, installer_meta, tmp_path):
+    paths = MachinePaths(tmp_path / "incus-os")
+    mac = mac_address(SUBNET, 2)
+    xml_text = domain_xml(installer_spec, installer_meta, paths, mac, ["cred1"], install_media=True)
+    root = ET.fromstring(xml_text)
+
+    # Secure Boot enabled, enrolled keys disabled, SMM on
+    os_el = root.find("os")
+    assert os_el.get("firmware") == "efi"
+    assert os_el.find("boot") is None  # no <boot dev="hd"/>
+    features = {f.get("name"): f.get("enabled") for f in os_el.findall("firmware/feature")}
+    assert features["secure-boot"] == "yes"
+    assert features["enrolled-keys"] == "no"
+    assert root.find("features/smm").get("state") == "on"
+
+    # No fw_cfg credentials sysinfo, no guest agent channel, no graphics
+    assert root.find("sysinfo") is None
+    assert root.find("devices/channel") is None
+    assert root.find("devices/graphics") is None
+    assert root.find("devices/video") is None
+
+    # TPM with emulator 2.0 and dir source
+    tpm = root.find("devices/tpm")
+    assert tpm.get("model") == "tpm-crb"
+    backend = tpm.find("backend")
+    assert backend.get("type") == "emulator"
+    assert backend.get("version") == "2.0"
+    assert backend.get("persistent_state") == "yes"
+    assert backend.find("source").get("type") == "dir"
+    assert backend.find("source").get("path") == str(paths.tpm_dir)
+
+    # Controllers
+    controllers = {c.get("type"): c.get("model") for c in root.findall("devices/controller")}
+    assert controllers.get("scsi") == "virtio-scsi"
+    assert controllers.get("usb") == "qemu-xhci"
+
+    # Disks with install media: sda (scsi), sdb (usb install), sdc (usb seed)
+    disks = {d.find("target").get("dev"): d for d in root.findall("devices/disk")}
+    assert set(disks) == {"sda", "sdb", "sdc"}
+
+    sda = disks["sda"]
+    assert sda.find("source").get("file") == str(paths.data_disk)
+    assert sda.find("target").get("bus") == "scsi"
+    assert sda.findtext("serial") == "hitkit-data"
+    assert sda.find("boot").get("order") == "1"
+
+    sdb = disks["sdb"]
+    assert sdb.find("source").get("file") == str(paths.install_disk)
+    assert sdb.find("target").get("bus") == "usb"
+    assert sdb.find("target").get("removable") == "on"
+    assert sdb.find("boot").get("order") == "2"
+
+    sdc = disks["sdc"]
+    assert sdc.find("source").get("file") == str(paths.seed_img)
+    assert sdc.find("driver").get("type") == "raw"
+    assert sdc.find("target").get("bus") == "usb"
+    assert sdc.find("target").get("removable") == "on"
+
+
+def test_installer_domain_xml_without_install_media(installer_spec, installer_meta, tmp_path):
+    paths = MachinePaths(tmp_path / "incus-os")
+    mac = mac_address(SUBNET, 2)
+    xml_text = domain_xml(installer_spec, installer_meta, paths, mac, [], install_media=False)
+    root = ET.fromstring(xml_text)
+
+    disks = {d.find("target").get("dev"): d for d in root.findall("devices/disk")}
+    assert set(disks) == {"sda"}
+

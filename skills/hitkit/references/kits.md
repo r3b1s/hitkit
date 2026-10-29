@@ -123,6 +123,29 @@ wire it in. TLS uses the hitkit CA.
     | curl -sS --cacert ~/.local/share/hitkit/ca/ca.crt -K - https://netbird.hitkit.internal/api/peers
   ```
 
+## incus-os
+
+- Machine `incus-os`: IncusOS appliance VM with 4 vCPU, 8 GiB RAM, 150 GiB data disk (`data.qcow2`),
+  virtio-scsi disk, swtpm emulator 2.0 backend, and Secure Boot. It is `stateful_os` (immutable,
+  self-updating OS with LUKS disk encryption sealed to TPM and NVRAM state): `upgrade` refuses,
+  so updates happen in place.
+- Incus remote: `hitkit-incus-os` at `https://incus-os.hitkit.internal:8443`.
+- No interactive shell or SSH daemon (`hitkit ssh` refuses). Administration is done via
+  the `incus` CLI, `incus admin os` against the remote, or the Incus web UI.
+- Web UI: `https://incus-os.hitkit.internal:8443/ui/`. Login uses a PKCS#12 client certificate
+  `browser.p12`: `hitkit browser-cert incus-os` imports it into every Firefox profile and
+  `~/.pki/nssdb` (Chromium) without root (`--remove` takes it out again; `--db DIR` targets one
+  database). The browsers need a restart, and accept the self-signed server certificate once.
+- `creds` keys: `url`, `ui`, `remote_add` (while CLI token is pending), `server_fingerprint`,
+  `ui_certificate` (path to `browser.p12`), `ui_certificate_password`, `ui_import`,
+  `encryption_recovery_key`, `pool_recovery_key`, `shell`.
+- Tokens: `hitkit token create incus-os --name NAME` creates an Incus trust token
+  (`--json`: `{"name", "token", "remote_add", "user", "scopes", "expires"}`).
+  `hitkit token list incus-os` lists pending tokens and the clients that used one (not hitkit's own); `hitkit token revoke incus-os NAME`
+  revokes them.
+- Durability: NVRAM and TPM emulator state are kept in `<name>-data.state/` across `destroy`
+  and restored on next `up`. Backups copy disk and state offline in `<name>.data.state.tar`.
+
 ## hitkit-dev, hitkit-dev-debian, hitkit-dev-fedora
 
 - Machines `dev` (Arch), `dev-debian` and `dev-fedora`. Each is for

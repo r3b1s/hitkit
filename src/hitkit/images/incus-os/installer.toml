@@ -1,0 +1,6 @@
+# IncusOS install image (stable channel), from https://images.linuxcontainers.org/os/index.json
+[installer]
+name = "IncusOS"
+version = "202610272235"
+url = "https://images.linuxcontainers.org/os/202610272235/x86_64/IncusOS_202610272235.img.gz"
+sha256 = "86656db79efcc2cb43ca7fb02c91921b0c556d8d351fdb878741a0f733868b50"

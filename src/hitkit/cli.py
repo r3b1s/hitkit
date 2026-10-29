@@ -412,7 +412,7 @@ def _bring_up(ctx, kit_name: str, knob_args: list[str], sizing_args: dict) -> No
         for m in plan:
             with trace.span("hooks.credentials", kit=kit.name, machine=m.name):
                 kit_creds = hooks.credentials(hctx, m, plan)
-            lifecycle.up(conn, hctx, m, log, kit_creds)
+            lifecycle.up(conn, hctx, m, log, kit_creds, **kits.installer_hooks(hooks, hctx, m, plan))
             with trace.span("hooks.after_ready", kit=kit.name, machine=m.name):
                 hooks.after_ready(hctx, m, plan, knobs, log)
         with trace.span("hooks.finish", kit=kit.name):
@@ -426,7 +426,13 @@ def _bring_up(ctx, kit_name: str, knob_args: list[str], sizing_args: dict) -> No
     else:
         click.secho(f"✓ {kit.name} is ready ({time.monotonic() - started:.0f}s)", fg="green")
         _print_rows(rows)
-        click.echo(f"\nNext: hitkit creds {kit.name}    hitkit ssh {plan[0].name}")
+        steps = hooks.next_steps(hctx, plan)
+        if steps:
+            click.echo()
+            for step in steps:
+                click.echo(step)
+        else:
+            click.echo(f"\nNext: hitkit creds {kit.name}    hitkit ssh {plan[0].name}")
 
 
 @cli.command()
@@ -515,6 +521,55 @@ def creds(ctx, kit_name) -> None:
         width = max(len(k) for k in data)
         for k, v in data.items():
             click.echo(f"{k:<{width}}  {v}")
+
+
+@cli.command("browser-cert")
+@click.argument("kit_name")
+@click.option("--remove", is_flag=True, help="Remove the certificate from those databases instead.")
+@click.option("--db", "dbs", multiple=True, type=click.Path(exists=True, file_okay=False, path_type=Path),
+              help="An NSS database directory, repeatable (default: every Firefox profile and ~/.pki/nssdb).")
+@click.pass_context
+def browser_cert(ctx, kit_name, remove, dbs) -> None:
+    """Import a kit's browser login certificate into Firefox and Chromium. No root needed.
+
+    Firefox keeps a certificate database per profile; Chromium shares ~/.pki/nssdb. A
+    browser picks the certificate up after a restart. Re-running is harmless, and replaces
+    a certificate the kit has since regenerated.
+    """
+    from hitkit import kits
+    from hitkit.errors import HitkitError
+    from hitkit.host import nssdb
+
+    kits.load(kit_name)
+    hctx = _host_context()
+    cert = kits.hooks(kit_name).browser_certificate(hctx)
+    if cert is None:
+        raise HitkitError(f"kit {kit_name!r} has no browser login certificate")
+    targets = list(dbs) or nssdb.databases(hctx.user.home)
+    if not targets:
+        raise HitkitError("found no Firefox profile and no ~/.pki/nssdb",
+                          hint="start each browser once (it creates its certificate database), or pass --db")
+    results = []
+    for db in targets:
+        try:
+            if remove:
+                result = "removed" if nssdb.remove(db, cert["nickname"]) else "absent"
+            else:
+                result = nssdb.import_bundle(db, cert["bundle"], cert["password"], cert["nickname"],
+                                             cert["certificate"])
+            results.append({"db": str(db), "result": result})
+        except HitkitError as e:
+            results.append({"db": str(db), "result": "failed", "error": str(e), "hint": e.hint})
+    if _json(ctx):
+        _emit(ctx, results)
+    else:
+        for r in results:
+            click.echo(f"{r['result']:<9} {r['db']}" + (f"  ({r['error']}; {r['hint']})" if "error" in r else ""))
+        if any(r["result"] in ("imported", "replaced") for r in results):
+            click.echo(f"Restart the browser to pick it up; it appears as {cert['nickname']!r}.")
+    failed = [r["db"] for r in results if r["result"] == "failed"]
+    if failed:
+        raise HitkitError(f"could not update {', '.join(failed)}")
 
 
 @cli.group()
@@ -886,10 +941,15 @@ def status(ctx, kit_name) -> None:
 @click.argument("command", nargs=-1, type=click.UNPROCESSED)
 def ssh(login, machine, command) -> None:
     """SSH into a machine using its pinned host key."""
-    from hitkit import trace
-    from hitkit.machine import remote
+    from hitkit import kits, trace
+    from hitkit.errors import HitkitError
+    from hitkit.machine import images, remote
 
-    argv = remote.ssh_args(_host_context(), machine, login, interactive=True) + list(command)
+    spec = next((s for k in kits.all_kits() if (s := k.spec_for(machine))), None)
+    if spec is not None and images.is_installer_role(spec.role):
+        raise HitkitError(f"{machine} has no shell: it runs its vendor's appliance OS",
+                          hint=f"hitkit creds {spec.kit} shows how to manage it")
+    argv =remote.ssh_args(_host_context(), machine, login, interactive=True) + list(command)
     trace.logger("cli").info("exec ssh", argv=argv)
     os.execvp("ssh", argv)
 
@@ -1062,7 +1122,7 @@ def _gc(ctx, yes: bool, include_dirs: bool, delete_data: bool = False) -> None:
             images.remove(img)
         if delete_data:
             for k in kept:
-                k.path.unlink()
+                lifecycle.delete_kept_disk(k.path)
     data = {"orphan_dirs": [str(d) for d in dirs], "images": [i.id for i in unused],
             "kept_disks": [{"machine": k.machine, "kind": k.kind, "path": str(k.path), "size_bytes": k.size_bytes,
                             "modified": k.modified, "reused_by_up": k.reused_by_up} for k in kept],

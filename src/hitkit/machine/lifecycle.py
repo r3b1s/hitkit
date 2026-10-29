@@ -32,6 +32,10 @@ from hitkit.paths import UserContext, ensure_private_dir
 
 READY_TIMEOUT = 300
 
+# Supplied by the kit layer for installer roles (images/<role>/installer.toml).
+Seed = Callable[[], dict[str, dict]]  # seed sections for a fresh install
+Probe = Callable[[], str | None]  # None when ready, otherwise why not
+
 _STATES = {0: "unknown", 1: "running", 2: "blocked", 3: "paused", 4: "stopping",
            5: "stopped", 6: "crashed", 7: "suspended"}
 
@@ -110,6 +114,28 @@ def _defined_size(dom) -> tuple[int | None, int | None]:
 DATA_DEVICE = "vdb"  # the data disk's target in domain.py
 
 
+def has_install_media(dom) -> bool:
+    """An installer machine still has its install media attached: its install has not finished
+    (or `up` was interrupted before detaching it)."""
+    return "install.qcow2" in dom.XMLDesc(0)
+
+
+def detach_install_media(dom) -> None:
+    """Detach the install and seed disks (domain.py's sdb, sdc), live and from the definition.
+    IncusOS notices the device going away and reboots into the installed system."""
+    lv = _libvirt()
+    flags = lv.VIR_DOMAIN_AFFECT_LIVE | lv.VIR_DOMAIN_AFFECT_CONFIG
+    for target in ("sdb", "sdc"):
+        xml = f"<disk type='file' device='disk'><target dev='{target}' bus='usb'/></disk>"
+        try:
+            dom.detachDeviceFlags(xml, flags)
+        except lv.libvirtError as e:  # e.g. already gone after an interrupted `up`
+            _t.warning("detach install device failed", target=target, error=str(e))
+    if has_install_media(dom):
+        raise HitkitError(f"could not detach the install media from {dom.name()}",
+                          hint="see `hitkit trace --failed last`")
+
+
 def data_disk_gib(ctx: HostContext, name: str) -> float | None:
     disk = ctx.paths(name).data_disk
     if not disk.exists():
@@ -138,8 +164,9 @@ def _reconcile_size(conn, dom, ctx: HostContext, spec: MachineSpec, info: Machin
         return dom, False
     check_resize(ctx, spec)
     log(f"{spec.name}: growing the data disk {current:.0f} -> {spec.data_disk_gib} GiB")
+    device = "sda" if images.is_installer_role(spec.role) else DATA_DEVICE
     if dom.isActive():
-        dom.blockResize(DATA_DEVICE, spec.data_disk_gib * 2**30, _libvirt().VIR_DOMAIN_BLOCK_RESIZE_BYTES)
+        dom.blockResize(device, spec.data_disk_gib * 2**30, _libvirt().VIR_DOMAIN_BLOCK_RESIZE_BYTES)
     else:
         disks.resize(ctx.paths(spec.name).data_disk, spec.data_disk_gib)
     _t.info("data disk grown", machine=spec.name, from_gib=round(current), to_gib=spec.data_disk_gib)
@@ -183,24 +210,33 @@ def _require_owned(info: MachineInfo, force: bool = False) -> None:
 def up(
     conn, ctx: HostContext, spec: MachineSpec, log: Callable[[str], None],
     extra_creds: dict[str, bytes] | None = None,
+    seed: Seed | None = None, probe: Probe | None = None,
 ) -> MachineInfo:
-    """Create the machine if needed, start it if stopped, and wait for readiness."""
+    """Create the machine if needed, start it if stopped, and wait for readiness.
+
+    Installer roles need ``seed`` (called only when a fresh install starts) and ``probe``
+    (polled for readiness: they report nothing on the console)."""
     with trace.span("machine.up", machine=spec.name, role=spec.role):
         found = get(conn, spec.name, ctx.cfg.install_id)
         grown = False
         booted = True  # by us, now: the console will carry a fresh readiness marker
+        paths = ctx.paths(spec.name)
+        is_installer = images.is_installer_role(spec.role)
+        if is_installer and (seed is None or probe is None):
+            raise HitkitError(f"{spec.name}: an installer role needs a seed and a readiness probe from its kit")
         if found is None:
-            dom = _create(conn, ctx, spec, log, extra_creds or {})
+            dom = _create(conn, ctx, spec, log, extra_creds or {}, seed=seed)
         else:
             dom, info = found
             _require_owned(info)
             dom, grown = _reconcile_size(conn, dom, ctx, spec, info, log)
             if outdated(ctx, info) and not spec.stateful_os:
                 log(f"{spec.name} runs an older image than its role's current one; run `hitkit upgrade {spec.kit}`")
-            paths = ctx.paths(spec.name)
-            changed = creds.sync_kit_credentials(paths.creds_dir, extra_creds or {}, ctx.user)
-            if changed:
-                dom = redefine(conn, dom, ctx, spec, info.meta)
+            changed = False
+            if not is_installer:
+                changed = creds.sync_kit_credentials(paths.creds_dir, extra_creds or {}, ctx.user)
+                if changed:
+                    dom = redefine(conn, dom, ctx, spec, info.meta)
             if dom.isActive():
                 booted = changed
                 if changed:
@@ -213,6 +249,21 @@ def up(
                     log(f"credentials for {spec.name} changed; restarting it to apply them")
                     restart(dom)
                     booted = True
+
+        if is_installer:
+            if has_install_media(dom):
+                log(f"waiting for {spec.name} to install (watch: hitkit logs {spec.name} -f)")
+                readiness.wait_installer(paths.console_log, spec.ready_timeout, lambda: bool(dom.isActive()))
+                log(f"install completed; detaching the install media from {spec.name}")
+                detach_install_media(dom)
+                paths.install_disk.unlink(missing_ok=True)
+                paths.seed_img.unlink(missing_ok=True)
+            log(f"waiting for {spec.name} to report ready")
+            _wait_ready(ctx, dom, spec.name, fresh_boot=booted, timeout=spec.ready_timeout, probe=probe)
+            if grown:
+                log(f"{spec.name}: the disk was grown; the extra space will be available after the next reboot")
+            return _info(dom, ctx.cfg.install_id)
+
         minutes = spec.ready_timeout // 60
         log(f"waiting for {spec.name} to report ready" + (
             f" (its first boot can take up to {minutes} min; watch: hitkit logs {spec.name} -f)"
@@ -236,6 +287,7 @@ def create(
 def _create(
     conn, ctx: HostContext, spec: MachineSpec, log: Callable[[str], None],
     extra_creds: dict[str, bytes], data_backing: Path | None = None, disposable: bool = False,
+    seed: Seed | None = None,
 ):
     with trace.span("machine.create", machine=spec.name, role=spec.role) as result:
         image = images.ensure(ctx.user, spec.role, log)
@@ -247,6 +299,7 @@ def _create(
             if not disposable and paths.data_disk.exists():
                 leftover = ensure_private_dir(ctx.vms_dir / KEPT_DIR, ctx.user) / f".{spec.name}-data-leftover.qcow2"
                 paths.data_disk.replace(leftover)
+                _stash_state(ctx, paths, _sidecar(leftover))
                 log(f"{spec.name}: found its data disk without a libvirt domain; reusing it")
                 _t.warning("data disk found without a domain; reusing it", machine=spec.name)
             if spec.stateful_os and paths.os_disk.exists():
@@ -259,34 +312,55 @@ def _create(
         mac = mac_address(subnet, ip.packed[3])
         dom = None
         reused = reused_os = False
+        is_installer = images.is_installer_role(spec.role)
         try:
             log(f"creating disks for {spec.name}")
-            kept_os = leftover_os or (newest_kept_disk(ctx, spec.name, "os") if spec.stateful_os else None)
-            if kept_os is not None:
-                # This machine's OS disk holds state; bring its own back rather than a fresh one.
-                log(f"reusing {spec.name}'s kept OS disk (its system state lives there)")
-                kept_os.replace(paths.os_disk)
-                reused_os = True
-                image = _image_of(ctx, paths.os_disk) or image
-            else:
-                disks.create_overlay(image.path, paths.os_disk)
+            if not is_installer:
+                kept_os = leftover_os or (newest_kept_disk(ctx, spec.name, "os") if spec.stateful_os else None)
+                if kept_os is not None:
+                    # This machine's OS disk holds state; bring its own back rather than a fresh one.
+                    log(f"reusing {spec.name}'s kept OS disk (its system state lives there)")
+                    kept_os.replace(paths.os_disk)
+                    reused_os = True
+                    image = _image_of(ctx, paths.os_disk) or image
+                else:
+                    disks.create_overlay(image.path, paths.os_disk)
             kept = None if disposable else newest_kept_disk(ctx, spec.name)
             if data_backing is not None:
                 disks.create_overlay(data_backing, paths.data_disk)
             elif leftover is not None:
                 leftover.replace(paths.data_disk)
+                _restore_state(_sidecar(leftover), paths)
                 reused = True
             elif kept is not None:
                 log(f"reusing kept data disk for {spec.name}")
                 kept.replace(paths.data_disk)
+                if _restore_state(_sidecar(kept), paths):
+                    log(f"bringing back {spec.name}'s NVRAM and TPM state")
                 reused = True
             else:
                 disks.create_data_disk(paths.data_disk, spec.data_disk_gib)
+
+            if is_installer:
+                if not reused:
+                    from hitkit.machine import seed as seed_disk
+
+                    disks.create_overlay(image.path, paths.install_disk)
+                    seed_disk.create_seed_image(paths.seed_img, seed())
+                elif not paths.tpm_dir.is_dir():
+                    log(f"warning: {spec.name}'s TPM state is missing, so it will ask for its disk "
+                        f"recovery key on boot (hitkit creds {spec.kit} shows it)")
+                paths.tpm_dir.mkdir(exist_ok=True)
+
             if reused and (data_disk_gib(ctx, spec.name) or 0) < spec.data_disk_gib - 0.01:
                 disks.resize(paths.data_disk, spec.data_disk_gib)  # the fs grows at boot (x-systemd.growfs)
-            machine_creds = creds.build(spec.name, subnet, mac, ctx.ca, creds.ensure_client_key(ctx.user), extra_creds)
-            names = creds.write(paths.creds_dir, machine_creds, ctx.user)
-            paths.known_hosts.write_text(machine_creds.known_hosts)
+
+            names = []
+            if not is_installer:
+                machine_creds = creds.build(spec.name, subnet, mac, ctx.ca, creds.ensure_client_key(ctx.user), extra_creds)
+                names = creds.write(paths.creds_dir, machine_creds, ctx.user)
+                paths.known_hosts.write_text(machine_creds.known_hosts)
+
             meta = metadata.MachineMeta(
                 install_id=ctx.cfg.install_id, kit=spec.kit, kit_version=spec.kit_version,
                 machine=spec.name, role=spec.role, image=image.id, address=str(ip),
@@ -294,7 +368,7 @@ def _create(
                 versions=image.versions,
             )
             log(f"defining and starting {spec.domain_name} at {ip}")
-            xml = domain_xml(spec, meta, paths, mac, names)
+            xml = domain_xml(spec, meta, paths, mac, names, install_media=is_installer and not reused)
             _t.debug("defining domain", machine=spec.name, image=image.id, address=str(ip), credentials=names, xml=xml)
             dom = conn.defineXML(xml)
             result["image"] = image.id
@@ -305,7 +379,7 @@ def _create(
                 keep_data_disk(ctx, spec.name, "create failed")
             if reused_os:
                 keep_data_disk(ctx, spec.name, "create failed", kind="os")
-            _teardown(dom, paths)
+            _teardown(dom, paths, keep_state=is_installer and reused)
             raise
 
 
@@ -314,8 +388,10 @@ def redefine(conn, dom, ctx: HostContext, spec: MachineSpec, meta: metadata.Mach
     paths = ctx.paths(spec.name)
     ip = slot_address(ctx.cfg.network(), spec.name)
     mac = mac_address(ctx.cfg.network(), ip.packed[3])
-    names = sorted(p.name for p in paths.creds_dir.iterdir())
-    xml = domain_xml(spec, meta, paths, mac, names, uuid=dom.UUIDString())
+    is_installer = images.is_installer_role(spec.role)
+    names = [] if is_installer else sorted(p.name for p in paths.creds_dir.iterdir())
+    install_media = has_install_media(dom) if is_installer else False
+    xml = domain_xml(spec, meta, paths, mac, names, uuid=dom.UUIDString(), install_media=install_media)
     _t.debug("redefining domain", machine=spec.name, image=meta.image, credentials=names, xml=xml)
     return conn.defineXML(xml)
 
@@ -351,6 +427,9 @@ def upgrade(
     """Move a machine onto its role's current image, keeping data disk, credentials and
     host key. Rolls back to the previous OS overlay if the new one does not become ready.
     Returns False if the machine was already current."""
+    if images.is_installer_role(spec.role):
+        raise HitkitError(f"{spec.name} was installed from its vendor's image and updates itself in place",
+                          hint="hitkit only pins the version a fresh install starts from")
     if spec.stateful_os:
         raise HitkitError(
             f"{spec.name} keeps system state on its OS disk, so it is never re-imaged",
@@ -414,29 +493,38 @@ def upgrade(
         return True
 
 
-def _teardown(dom, paths: MachinePaths) -> None:
+def _teardown(dom, paths: MachinePaths, keep_state: bool = False) -> None:
+    """Undefine the domain and remove the machine directory. ``keep_state``: libvirt must not
+    delete NVRAM or TPM state (an installer machine's disk key is sealed to them; the caller
+    has moved them aside). Missing flags fail loudly rather than fall back to deleting."""
     lv = _libvirt()
+    if keep_state:
+        flags = lv.VIR_DOMAIN_UNDEFINE_KEEP_NVRAM | lv.VIR_DOMAIN_UNDEFINE_KEEP_TPM
+    else:
+        flags = lv.VIR_DOMAIN_UNDEFINE_NVRAM
     if dom is not None:
         try:
             if dom.isActive():
                 dom.destroy()
-            dom.undefineFlags(lv.VIR_DOMAIN_UNDEFINE_NVRAM | lv.VIR_DOMAIN_UNDEFINE_MANAGED_SAVE)
+            dom.undefineFlags(flags | lv.VIR_DOMAIN_UNDEFINE_MANAGED_SAVE)
         except lv.libvirtError:
             pass
     shutil.rmtree(paths.root, ignore_errors=True)
 
 
-def start(conn, ctx: HostContext, name: str, log: Callable[[str], None]) -> None:
-    """Start an existing machine and wait until it reports ready."""
+def start(conn, ctx: HostContext, name: str, log: Callable[[str], None], probe: Probe | None = None) -> None:
+    """Start an existing machine and wait until it reports ready (``probe``: as for `up`)."""
     with trace.span("machine.start", machine=name):
         found = get(conn, name, ctx.cfg.install_id)
         if found is None:
             raise HitkitError(f"no machine named {name!r}", hint="hitkit status")
         dom, info = found
         _require_owned(info)
+        if probe is None and images.is_installer_role(info.meta.role):
+            raise HitkitError(f"{name}: an installer role needs a readiness probe from its kit")
         booted = False if dom.isActive() else not _power_on(ctx, dom, name, log)
         log(f"waiting for {name} to report ready")
-        _wait_ready(ctx, dom, name, fresh_boot=booted)
+        _wait_ready(ctx, dom, name, fresh_boot=booted, probe=probe)
 
 
 # --- saved state ------------------------------------------------------------------
@@ -471,9 +559,35 @@ def _power_on(ctx: HostContext, dom, name: str, log: Callable[[str], None]) -> b
     return resumed
 
 
-def _wait_ready(ctx: HostContext, dom, name: str, fresh_boot: bool, timeout: int = READY_TIMEOUT) -> None:
-    """After a boot hitkit started, the console carries the verdict. Otherwise (already
-    running, or resumed: the console log restarts empty) ask the guest over SSH."""
+def _wait_probe(ctx: HostContext, dom, name: str, probe: Probe, timeout: int) -> None:
+    """Poll the kit's probe (installer roles report nothing on the console) until it passes."""
+    deadline = time.monotonic() + timeout
+    reason = "no answer yet"
+    while True:
+        if not dom.isActive():
+            raise readiness.NotReady(f"{name} stopped before reporting ready", hint=f"see {ctx.paths(name).console_log}")
+        try:
+            reason = probe()
+        except HitkitError as e:
+            reason = str(e)
+        if reason is None:
+            _t.info("machine ready (probe)", machine=name)
+            return
+        if time.monotonic() > deadline:
+            _t.error("machine not ready (probe)", machine=name, reason=reason)
+            raise readiness.NotReady(f"{name} did not become ready in {timeout}s: {reason}",
+                                     hint=f"see {ctx.paths(name).console_log}")
+        time.sleep(2)
+
+
+def _wait_ready(ctx: HostContext, dom, name: str, fresh_boot: bool, timeout: int = READY_TIMEOUT,
+                probe: Probe | None = None) -> None:
+    """With a ``probe``, poll it. Otherwise: after a boot hitkit started, the console carries
+    the verdict; if not (already running, or resumed: the console log restarts empty) ask the
+    guest over SSH."""
+    if probe is not None:
+        _wait_probe(ctx, dom, name, probe, timeout)
+        return
     if fresh_boot:
         readiness.wait(ctx.paths(name).console_log, timeout, lambda: bool(dom.isActive()))
         return
@@ -550,8 +664,47 @@ def keep_data_disk(ctx: HostContext, name: str, reason: str = "kept on request",
         stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         dest = dest.with_name(f"{name}-{kind}-{stamp}.qcow2")
     disk.replace(dest)
+    if kind == "data":
+        _stash_state(ctx, paths, _sidecar(dest))
     _t.warning("disk kept", machine=name, kind=kind, reason=reason, path=dest)
     return dest
+
+
+# An installer machine's disk is encrypted with a key sealed to its TPM, measured against
+# the Secure Boot state in its NVRAM (docs/incus/incus-os-in-libvirt.md §5): without both,
+# it boots only with its recovery key. So they travel with the disk, in a sidecar
+# directory next to the kept disk. Only installer machines have a TPM directory.
+
+def _sidecar(disk: Path) -> Path:
+    return disk.with_suffix(".state")
+
+
+def _stash_state(ctx: HostContext, paths: MachinePaths, sidecar: Path) -> None:
+    if not paths.tpm_dir.is_dir():
+        return
+    ensure_private_dir(sidecar, ctx.user)
+    if paths.nvram.exists():
+        paths.nvram.replace(sidecar / "nvram.fd")
+    shutil.rmtree(sidecar / "tpm", ignore_errors=True)
+    paths.tpm_dir.replace(sidecar / "tpm")
+
+
+def _restore_state(sidecar: Path, paths: MachinePaths) -> bool:
+    """Bring a kept disk's NVRAM and TPM state back; False if it has none."""
+    if not (sidecar / "tpm").is_dir():
+        return False
+    if (sidecar / "nvram.fd").exists():
+        (sidecar / "nvram.fd").replace(paths.nvram)
+    shutil.rmtree(paths.tpm_dir, ignore_errors=True)
+    (sidecar / "tpm").replace(paths.tpm_dir)
+    shutil.rmtree(sidecar)
+    return True
+
+
+def delete_kept_disk(path: Path) -> None:
+    """Delete a kept disk and its NVRAM and TPM state, if any (the state holds key material)."""
+    path.unlink()
+    shutil.rmtree(_sidecar(path), ignore_errors=True)
 
 
 def keep_disks(ctx: HostContext, name: str, reason: str, stateful_os: bool) -> list[Path]:
@@ -604,11 +757,12 @@ def destroy(conn, ctx: HostContext, name: str, force: bool = False, delete_data:
             return False
         if found is not None:
             _require_owned(found[1], force)
+        keep_state = not delete_data and paths.tpm_dir.is_dir()  # moved aside with the kept disk
         if not delete_data:
             if found is not None:
                 stop(conn, ctx, name)  # a clean shutdown flushes everything to the kept disk
             keep_disks(ctx, name, "destroyed without --delete-data", stateful_os)
-        _teardown(found[0] if found else None, paths)
+        _teardown(found[0] if found else None, paths, keep_state=keep_state)
         return True
 
 
@@ -678,7 +832,7 @@ def unreferenced_images(ctx: HostContext) -> list[images.Image]:
 
 
 def _known_roles() -> set[str]:
-    return {d.name for d in images.IMAGES_DIR.iterdir() if (d / "mkosi.conf").is_file()}
+    return {d.name for d in images.IMAGES_DIR.iterdir() if (d / "mkosi.conf").is_file() or (d / "installer.toml").is_file()}
 
 
 def require_session_ready(conn) -> None:

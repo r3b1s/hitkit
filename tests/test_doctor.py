@@ -54,3 +54,34 @@ def test_run_checks_turns_exceptions_into_fail(monkeypatch):
     assert results[0].status == "fail"
     assert "boom" in results[0].message
     assert all(r.status == "ok" for r in results[1:])
+
+
+# --- swtpm and secure-boot OVMF checks (plan §8, §9) -----------------------
+
+
+def test_check_swtpm_warns_when_missing_and_ok_when_present(monkeypatch):
+    monkeypatch.setattr(doctor.shutil, "which", lambda *a, **k: None)
+    res = doctor.check_swtpm()
+    assert res.name == "swtpm"
+    assert res.status == "warn"
+    assert "incus-os" in res.message
+
+    monkeypatch.setattr(doctor.shutil, "which", lambda *a, **k: "/usr/bin/swtpm")
+    monkeypatch.setattr(doctor.hostinfo, "detect", lambda: doctor.hostinfo.Distro("arch", "Arch"))
+    res_ok = doctor.check_swtpm()
+    assert res_ok.name == "swtpm"
+    assert res_ok.status == "ok"
+
+
+def test_check_secure_boot_ovmf_warns_when_missing_and_ok_when_present(monkeypatch):
+    monkeypatch.setattr(doctor.hostinfo, "secure_boot_ovmf_available", lambda: False)
+    res = doctor.check_secure_boot_ovmf()
+    assert res.name == "secure-boot-ovmf"
+    assert res.status == "warn"
+    assert "incus-os" in res.message
+
+    monkeypatch.setattr(doctor.hostinfo, "secure_boot_ovmf_available", lambda: True)
+    res_ok = doctor.check_secure_boot_ovmf()
+    assert res_ok.name == "secure-boot-ovmf"
+    assert res_ok.status == "ok"
+

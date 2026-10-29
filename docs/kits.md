@@ -129,9 +129,9 @@ The slot fixes the static address (`10.77.0.<octet>` on the default subnet), the
 name `<name>.hitkit.internal`, and the MAC address.
 
 Pick an unused octet below `30`: hitkit's own addresses are `.1`-`.29`. In use: `1`
-host, `10` forgejo, `11` proxmox, `12` pbs, `13` ludus, `14` devbox, `15` dev, `16`
+host, `2` incus-os, `10` forgejo, `11` proxmox, `12` pbs, `13` ludus, `14` devbox, `15` dev, `16`
 dev-debian, `17` dev-fedora, `18` cache, `19` netbird, `20`-`29` runner-1 to runner-10.
-Octets `2`-`9` are free for new kits. The rest of the subnet is not hitkit's:
+Octets `3`-`9` are free for new kits. The rest of the subnet is not hitkit's:
 `30`-`99` are static addresses for your own guests, `100`-`199` the DHCP pool, and
 `200`-`254` the overflow that holds the job pool's ci-1 to ci-55 (`docs/design.md`
 section 7.2).
@@ -206,6 +206,43 @@ and `TimeoutStartSec=2h`. A drop-in on `hitkit-ready.service` orders readiness a
 `ready.d/60-ludus.sh` checks the marker and the API. `kit.toml` sets `ready_timeout = 3600`.
 Progress is visible with `hitkit logs ludus -f`.
 
+### Installer roles
+
+Most roles are mkosi images that boot as disposable overlays reporting `HITKIT-READY`
+on the serial console. Some operating systems (such as IncusOS) cannot be built with
+mkosi because they are immutable, cryptographically signed, and provide their own installer.
+These are defined as installer roles:
+
+- **`installer.toml`**: Instead of `mkosi.conf`, an installer role directory contains
+  `installer.toml` with `[installer]` defining `name`, `version`, `url`, and `sha256`.
+  hitkit fetches the installation raw image, caches it by sha256, converts it to qcow2,
+  and attaches it as a removable installation media disk (`install.qcow2`) during initial
+  install.
+- **The seed hook (`hooks.seed`)**: Returns a mapping of `{section: dict}` configuring the
+  installer. It is called only when a fresh install starts (never for a machine brought
+  back from a kept or restored disk), so it is also where a kit forgets secrets that
+  belonged to an earlier install. hitkit writes the sections as `<section>.json` files onto
+  a 16 MiB FAT image labelled `SEED_DATA` (`seed.img`) attached alongside the installer.
+- **The probe hook (`hooks.probe_ready`)**: Installer guests do not run hitkit's
+  `ready.d/` gates, so nothing reports on the console. hitkit polls
+  `hooks.probe_ready(hctx, machine)` after every boot instead; it returns `None` when the
+  machine is ready, or a reason while waiting. The machine layer never imports kits: the CLI
+  and backup pass it `seed` and `probe` callables (`kits.installer_hooks`), and refuse an
+  installer machine without them.
+- **No shell.** `hitkit ssh` refuses installer machines and points at `hitkit creds <kit>`,
+  and `hitkit upgrade` refuses them: they update themselves.
+- **State sidecar (`<name>-data.state/`)**: Operating systems that bind disk encryption to a
+  virtual TPM and Secure Boot NVRAM (like IncusOS) require the TPM emulator state (`tpm/`)
+  and `nvram.fd` to remain paired with the disk: without them the disk unlocks only with
+  its recovery key. For machines with a `tpm/` directory (installer machines), keeping a
+  data disk moves `nvram.fd` and `tpm/` into a `<name>-data.state/` sidecar next to it, and
+  backups add a `<name>.data.state.tar`; both come back whenever the disk is reused.
+  `gc --delete-data` deletes the sidecar with its disk.
+- **Single disk (`data.qcow2`)**: Installer machines install the complete system onto a single
+  disk labeled with serial `hitkit-data` (`data.qcow2`). There is no separate `os.qcow2`.
+  `--disk` sizes this disk, and storage pools expand into the additional space on subsequent
+  reboots.
+
 ## 6. Data rules
 
 - **Persistent state lives under `/srv/data`.** Each machine's data disk is mounted there
@@ -278,7 +315,11 @@ top-level code light.
 | Method | When it runs | Purpose |
 |---|---|---|
 | `credentials(self, hctx, machine, plan) -> dict[str, bytes]` | before each machine is created or updated (`up`, `upgrade`) | extra credentials for the machine |
+| `seed(self, hctx, machine, plan) -> dict[str, dict]` | when a fresh install of an installer machine starts (`up`) | seed files for installer roles (`<section>.json` on FAT `SEED_DATA` disk) |
+| `probe_ready(self, hctx, machine) -> str \| None` | polled after every boot of an installer machine (`up`, `backup`, `restore`) | `None` when ready, otherwise a reason |
 | `after_ready(self, hctx, machine, plan, knobs, log)` | after each machine reports ready, in plan order, on every `up` and `upgrade` | configure the running machine; must be idempotent |
+| `next_steps(self, hctx, plan) -> list[str]` | after all machines are ready in `up` | replaces generic `Next: hitkit creds … hitkit ssh …` lines |
+| `browser_certificate(self, hctx) -> dict or None` | `hitkit browser-cert <kit>` | the PKCS#12 login certificate a browser uses: `{"bundle", "password", "nickname", "certificate"}` |
 | `finish(self, hctx, plan, knobs, log)` | once every machine is ready (also after `upgrade`) | wiring across machines |
 | `creds(self, hctx) -> dict` | `hitkit creds <kit>` (and `--json`) | URLs and logins; raise `HitkitError` with a hint if the kit is not up |
 | `backup_plan(self, machine) -> BackupPlan or None` | `hitkit backup`, per existing machine | `BackupPlan()` for offline (the default); `BackupPlan("online", ("forgejo.service",))` stops the listed units around a live copy; `None` skips the machine |

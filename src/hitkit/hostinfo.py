@@ -33,11 +33,11 @@ class Distro:
     def host_packages(self) -> str:
         return {
             "arch": "pacman -S --needed libvirt qemu-base edk2-ovmf dnsmasq mkosi systemd-ukify "
-                    "apt debian-archive-keyring dosfstools mtools e2fsprogs",
+                    "apt debian-archive-keyring dosfstools mtools e2fsprogs swtpm",
             "debian": "apt install libvirt-daemon-system qemu-system-x86 qemu-utils ovmf dnsmasq-base "
-                      "mkosi systemd-ukify python3-libvirt dosfstools mtools e2fsprogs",
+                      "mkosi systemd-ukify python3-libvirt dosfstools mtools e2fsprogs swtpm swtpm-tools",
             "fedora": "dnf install libvirt-daemon-kvm libvirt-daemon-config-network qemu-kvm edk2-ovmf "
-                      "mkosi systemd-ukify distribution-gpg-keys apt debian-keyring python3-libvirt dosfstools mtools e2fsprogs",
+                      "mkosi systemd-ukify distribution-gpg-keys apt debian-keyring python3-libvirt dosfstools mtools e2fsprogs swtpm swtpm-tools",
         }.get(self.family, "install libvirt, QEMU/KVM, OVMF, mkosi and systemd-ukify")
 
 
@@ -78,6 +78,24 @@ def ovmf_available() -> bool:
     """QEMU firmware descriptors are what libvirt's firmware autoselection uses."""
     dirs = [Path("/usr/share/qemu/firmware"), Path("/etc/qemu/firmware")]
     return any(d.is_dir() and any(d.glob("*.json")) for d in dirs)
+
+
+def secure_boot_ovmf_available() -> bool:
+    """Check that a secure-boot OVMF firmware descriptor exists (plan §8)."""
+    import json
+
+    dirs = [Path("/usr/share/qemu/firmware"), Path("/etc/qemu/firmware")]
+    for d in dirs:
+        if not d.is_dir():
+            continue
+        for p in d.glob("*.json"):
+            try:
+                data = json.loads(p.read_text())
+                if "secure-boot" in data.get("features", []):
+                    return True
+            except Exception:
+                continue
+    return False
 
 
 # Package manager + keyring a host needs to build each image distribution
