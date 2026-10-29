@@ -70,3 +70,15 @@ class MachinePaths:
     @property
     def console_log(self) -> Path:
         return self.root / "console.log"
+
+    @property
+    def install_disk(self) -> Path:
+        return self.root / "install.qcow2"
+
+    @property
+    def seed_img(self) -> Path:
+        return self.root / "seed.img"
+
+    @property
+    def tpm_dir(self) -> Path:
+        return self.root / "tpm"

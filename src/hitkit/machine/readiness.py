@@ -98,3 +98,54 @@ def wait(
         if clock() >= deadline:
             raise not_ready(f"no readiness report after {timeout:.0f}s", f"see {console_log}")
         sleep(poll)
+
+
+# --- installer machines (plan §4.4) ----------------------------------------
+
+# Console text that means "installed; remove the media". The TUI draws it with escape codes
+# in between, so only phrases seen intact on the console count (docs/incus/incus-os-in-libvirt.md
+# §4). The second is IncusOS booting its install media again after a finished install.
+INSTALL_PATTERNS = (
+    "was successfully installed.",
+    "install media detected, but the system is already installed",
+)
+
+
+def scan_installer(text: str) -> bool:
+    return any(p in text for p in INSTALL_PATTERNS)
+
+
+def wait_installer(
+    console_log: Path,
+    timeout: float,
+    is_running: Callable[[], bool],
+    poll: float = 1.0,
+    clock: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], None] = time.sleep,
+) -> None:
+    """Wait for the installer to finish in console.log."""
+    started = clock()
+    deadline = started + timeout
+
+    def not_ready(message: str, hint: str) -> NotReady:
+        try:
+            tail = console_log.read_text(errors="replace").replace("\r", "").splitlines()[-CONSOLE_TAIL_LINES:]
+        except FileNotFoundError:
+            tail = []
+        _t.error("installer machine not ready", reason=message, console_log=console_log,
+                 waited_s=round(clock() - started), console_tail="\n".join(tail))
+        return NotReady(message, hint=hint)
+
+    while True:
+        try:
+            text = console_log.read_text(errors="replace")
+        except FileNotFoundError:
+            text = ""
+        if scan_installer(text):
+            _t.info("installer finished", console_log=console_log, waited_s=round(clock() - started))
+            return
+        if not is_running():
+            raise not_ready("machine stopped before install completed", f"see {console_log}")
+        if clock() >= deadline:
+            raise not_ready(f"installer did not complete after {timeout:.0f}s", f"see {console_log}")
+        sleep(poll)

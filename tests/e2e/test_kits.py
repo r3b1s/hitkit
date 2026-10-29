@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
 import time
 import tomllib
@@ -128,3 +129,134 @@ def test_pbs_storage_on_proxmox_when_wired():
         unmet("pbs not wired to proxmox (`hitkit up pbs --proxmox`)")
     status = call(f"{pve['url']}/api2/json/nodes/proxmox/storage/pbs/status", dict([pve["api_header"].split(": ", 1)]))
     assert status["data"]["active"] == 1, status
+
+
+# --- incus-os ------------------------------------------------------------------
+# The disruptive tests restart the machine (destroy and up again, restore, grow) and take
+# minutes each; they also run with HITKIT_E2E_DISRUPTIVE=1. Nothing is deleted: destroy
+# keeps the disk, restore keeps the current disk in vms/.kept.
+
+disruptive = pytest.mark.skipif(os.environ.get("HITKIT_E2E_DISRUPTIVE") != "1",
+                                reason="set HITKIT_E2E_DISRUPTIVE=1 to restart incus-os")
+
+
+def incus_os_api():
+    from hitkit import kits
+    from hitkit.cli import _host_context
+
+    return kits.hooks("incus-os").api_client(_host_context())
+
+
+def incus_cli(conf: Path, *args: str) -> str:
+    """The incus client with its own configuration, never yours."""
+    env = dict(os.environ, INCUS_CONF=str(conf))
+    return subprocess.run(["incus", *args], env=env, capture_output=True, text=True, check=True,
+                          stdin=subprocess.DEVNULL).stdout
+
+
+def test_incus_os_runs_the_pinned_version_with_secure_boot_and_tpm():
+    require_kit("incus-os")
+    pinned = tomllib.loads((IMAGES / "incus-os/installer.toml").read_text())["installer"]["version"]
+    [machine] = [m for m in hitkit("status") if m["kit"] == "incus-os"]
+    assert machine["versions"] == {"incus-os": pinned}
+    api = incus_os_api()
+    assert api.get("/1.0")["auth"] == "trusted"
+    state = api.get("/os/1.0/system/security")["state"]
+    assert state["secure_boot_enabled"] is True
+    assert state["tpm_status"] == "ok"
+    assert state["system_state_is_trusted"] is True
+    assert {v["volume"]: v["state"] for v in state["encrypted_volumes"]}["root"] == "unlocked (TPM)"
+
+
+def test_incus_os_creds_and_the_pinned_certificate():
+    require_kit("incus-os")
+    creds = hitkit("creds", "incus-os")
+    assert creds["url"] == "https://incus-os.hitkit.internal:8443"
+    assert creds["ui"] == creds["url"] + "/ui/"
+    assert creds["encryption_recovery_key"] and creds["pool_recovery_key"]
+    assert Path(creds["ui_certificate"]).is_file() and creds["ui_certificate_password"]
+    from hitkit import incus
+
+    served = incus.server_certificate("incus-os.hitkit.internal")
+    assert incus.fingerprint(served) == creds["server_fingerprint"]
+
+
+def test_incus_os_token_becomes_a_remote_that_launches_a_container(tmp_path):
+    require_kit("incus-os")
+    if not shutil.which("incus"):
+        unmet("the incus CLI is not installed on this host")
+    name = f"e2e-{int(time.time())}"
+    tok = hitkit("token", "create", "incus-os", "--name", name)
+    try:
+        assert {t["name"]: t["scopes"] for t in hitkit("token", "list", "incus-os")}[name] == ["pending token"]
+        incus_cli(tmp_path, "remote", "add", "hitkit-incus-os", tok["token"])  # no fingerprint prompt
+        assert "https://incus-os.hitkit.internal:8443" in incus_cli(tmp_path, "remote", "list", "-f", "csv")
+        incus_cli(tmp_path, "launch", "images:alpine/3.22", f"hitkit-incus-os:{name}")
+        try:
+            assert incus_cli(tmp_path, "exec", f"hitkit-incus-os:{name}", "--", "cat", "/etc/alpine-release")
+        finally:
+            incus_cli(tmp_path, "delete", "-f", f"hitkit-incus-os:{name}")
+        assert {t["name"]: t["scopes"] for t in hitkit("token", "list", "incus-os")}[name] == ["trusted client"]
+    finally:
+        subprocess.run(HITKIT + ["token", "revoke", "incus-os", name], capture_output=True)
+    assert name not in {t["name"] for t in hitkit("token", "list", "incus-os")}
+
+
+def _marker_volume(api, name: str, create: bool) -> None:
+    if create:
+        api.post("/1.0/storage-pools/local/volumes", {"name": name, "type": "custom", "config": {}})
+    else:
+        api.delete(f"/1.0/storage-pools/local/volumes/custom/{name}")
+
+
+def _volumes(api) -> set[str]:
+    return {v.rsplit("/", 1)[-1] for v in api.get("/1.0/storage-pools/local/volumes/custom") or []}
+
+
+def _pool_gib(api) -> float:
+    [pool] = [p for p in api.get("/os/1.0/system/storage")["config"]["pools"] if p["name"] == "local"]
+    return pool["usable_pool_size_in_bytes"] / 2**30
+
+
+@disruptive
+def test_incus_os_comes_back_from_its_kept_disk_without_a_recovery_key():
+    require_kit("incus-os")
+    api = incus_os_api()
+    marker = f"e2e-kept-{int(time.time())}"
+    _marker_volume(api, marker, create=True)
+    fingerprint = hitkit("creds", "incus-os")["server_fingerprint"]
+    subprocess.run(HITKIT + ["destroy", "incus-os", "--yes"], check=True, capture_output=True)
+    subprocess.run(HITKIT + ["up", "incus-os"], check=True, capture_output=True)  # waits until trusted again
+    api = incus_os_api()
+    assert marker in _volumes(api)  # same disk, not a reinstall
+    assert hitkit("creds", "incus-os")["server_fingerprint"] == fingerprint
+    state = api.get("/os/1.0/system/security")["state"]
+    assert {v["volume"]: v["state"] for v in state["encrypted_volumes"]}["root"] == "unlocked (TPM)"
+    _marker_volume(api, marker, create=False)
+
+
+@disruptive
+def test_incus_os_backup_and_restore():
+    require_kit("incus-os")
+    api = incus_os_api()
+    marker = f"e2e-backup-{int(time.time())}"
+    _marker_volume(api, marker, create=True)
+    subprocess.run(HITKIT + ["backup", "incus-os"], check=True, capture_output=True)
+    _marker_volume(api, marker, create=False)
+    assert marker not in _volumes(api)
+    subprocess.run(HITKIT + ["restore", "incus-os", "--yes"], check=True, capture_output=True)
+    api = incus_os_api()
+    assert marker in _volumes(api)
+    _marker_volume(api, marker, create=False)
+
+
+@disruptive
+def test_incus_os_disk_grows_into_the_pool_after_a_reboot():
+    require_kit("incus-os")
+    [machine] = [m for m in hitkit("status") if m["kit"] == "incus-os"]
+    before = _pool_gib(incus_os_api())
+    target = machine["disk_gib"] + 10
+    subprocess.run(HITKIT + ["up", "incus-os", "--disk", str(target)], check=True, capture_output=True)
+    subprocess.run(HITKIT + ["down", "incus-os"], check=True, capture_output=True)
+    subprocess.run(HITKIT + ["up", "incus-os"], check=True, capture_output=True)
+    assert _pool_gib(incus_os_api()) > before + 9

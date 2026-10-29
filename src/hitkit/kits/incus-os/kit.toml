@@ -1,0 +1,14 @@
+# IncusOS (https://linuxcontainers.org/incus-os): an immutable OS running Incus, installed
+# from the official image. It updates itself in place, so its disk is stateful.
+name = "incus-os"
+description = "IncusOS with Incus and its web UI on https://incus-os.hitkit.internal:8443"
+version = 1
+
+[[machine]]
+name = "incus-os"
+role = "incus-os"
+cpus = 4
+memory_mib = 8192    # IncusOS wants 4 GiB for itself
+data_disk_gib = 150  # the whole disk; the local pool gets about 116 GiB
+stateful_os = true
+ready_timeout = 600  # install plus two reboots took 1m40s in the spike

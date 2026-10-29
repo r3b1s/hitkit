@@ -49,6 +49,10 @@ def get_or_create(user: UserContext, kit: str, name: str, generate: Callable[[],
     return value
 
 
+def delete(user: UserContext, kit: str, name: str) -> None:
+    (kit_dir(user, kit) / name).unlink(missing_ok=True)
+
+
 def remove_kit(user: UserContext, kit: str) -> None:
     shutil.rmtree(kit_dir(user, kit), ignore_errors=True)
 

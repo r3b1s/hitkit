@@ -94,7 +94,7 @@ def list_backups(user: UserContext, kit: str, dest: str | None = None) -> list[B
         if not (_STAMP.match(path.name) and manifest.is_file()):
             continue
         data = json.loads(manifest.read_text())
-        size = sum(f["size"] for m in data["machines"].values() for f in (m["file"], m.get("os_file")) if f)
+        size = sum(f["size"] for m in data["machines"].values() for f in (m["file"], m.get("os_file"), m.get("state_file")) if f)
         found.append(BackupInfo(path, data["kit"], data["created"], data["machines"], size))
     return found
 
@@ -187,7 +187,7 @@ def _online_restore_command(plan: BackupPlan, compressor: str, stamp: str) -> st
 def create(conn, hctx, kit, hooks, dest: str | None, keep: int, log: Callable[[str], None],
            method: str | None = None) -> Path:
     """Back up every machine of the kit that has data worth keeping; returns the backup directory."""
-    from hitkit.machine import lifecycle, remote
+    from hitkit.machine import images, lifecycle, remote
 
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     directory = kit_dir(hctx.user, kit.name, dest)
@@ -210,7 +210,10 @@ def create(conn, hctx, kit, hooks, dest: str | None, keep: int, log: Callable[[s
                 if how == "online":
                     entry = _backup_online(hctx, name, plan, partial, log, remote)
                 else:
-                    entry = _backup_offline(conn, hctx, name, partial, log, lifecycle, stateful)
+                    # An installer machine has a single disk (its data disk) holding the whole system.
+                    include_os = stateful and not images.is_installer_role(spec.role)
+                    entry = _backup_offline(conn, hctx, name, partial, log, lifecycle, include_os,
+                                            _probe(hooks, hctx, spec))
                 entry.update(image=info.meta.image if info.meta else None,
                              versions=info.meta.versions if info.meta else {}, quiesce=list(plan.quiesce))
                 manifest["machines"][name] = entry
@@ -245,7 +248,15 @@ def _backup_online(hctx, name: str, plan: BackupPlan, partial: Path, log, remote
             "compressor": compressor.split()[0]}
 
 
-def _backup_offline(conn, hctx, name: str, partial: Path, log, lifecycle, include_os: bool = False) -> dict:
+def _probe(hooks, hctx, spec):
+    """The readiness probe an installer machine needs to be started again (None for others)."""
+    from hitkit import kits
+
+    return kits.installer_hooks(hooks, hctx, spec, (spec,)).get("probe") if spec else None
+
+
+def _backup_offline(conn, hctx, name: str, partial: Path, log, lifecycle, include_os: bool = False,
+                    probe=None) -> dict:
     from hitkit.machine import disks
 
     found = lifecycle.get(conn, name, hctx.cfg.install_id)
@@ -256,16 +267,27 @@ def _backup_offline(conn, hctx, name: str, partial: Path, log, lifecycle, includ
         lifecycle.stop(conn, hctx, name)
     dest = partial / f"{name}.data.qcow2"
     os_dest = partial / f"{name}.os.qcow2"
+    state_dest = partial / f"{name}.data.state.tar"
+    has_state = hctx.paths(name).tpm_dir.is_dir()  # an installer machine's disk key is sealed to it
     try:
         disks.compressed_copy(hctx.paths(name).data_disk, dest)
         if include_os:  # flattened: the copy does not depend on a cached base image
             disks.compressed_copy(hctx.paths(name).os_disk, os_dest)
+        if has_state:
+            with tarfile.open(state_dest, "w") as tar:
+                if hctx.paths(name).nvram.exists():
+                    tar.add(hctx.paths(name).nvram, arcname="nvram.fd")
+                if hctx.paths(name).tpm_dir.exists():
+                    tar.add(hctx.paths(name).tpm_dir, arcname="tpm")
+            state_dest.chmod(0o600)
     finally:
         if was_running:
-            lifecycle.start(conn, hctx, name, log)
+            lifecycle.start(conn, hctx, name, log, probe)
     entry = {"method": "offline", "file": {"name": dest.name, "size": dest.stat().st_size, "sha256": _sha256(dest)}}
     if include_os:
         entry["os_file"] = {"name": os_dest.name, "size": os_dest.stat().st_size, "sha256": _sha256(os_dest)}
+    if has_state and state_dest.exists():
+        entry["state_file"] = {"name": state_dest.name, "size": state_dest.stat().st_size, "sha256": _sha256(state_dest)}
     return entry
 
 
@@ -289,7 +311,7 @@ def verify(backup: Path) -> dict:
     if not manifest_path.is_file():
         raise HitkitError(f"{backup} is not a hitkit backup (no manifest.json)", hint="hitkit backup --list")
     manifest = json.loads(manifest_path.read_text())
-    files = [f for m in manifest["machines"].values() for f in (m["file"], m.get("os_file")) if f]
+    files = [f for m in manifest["machines"].values() for f in (m["file"], m.get("os_file"), m.get("state_file")) if f]
     files.append(manifest["secrets"])
     for f in files:
         path = backup / f["name"]
@@ -324,9 +346,11 @@ def restore(conn, hctx, kit, hooks, backup: Path, log: Callable[[str], None]) ->
                 moved[name] = f"{name}:{DATA}/{PRE_RESTORE}{stamp}"
             else:
                 os_src = backup / entry["os_file"]["name"] if entry.get("os_file") else None
+                state_src = backup / entry["state_file"]["name"] if entry.get("state_file") else None
                 what = "OS and data disks" if os_src else "data disk"
                 log(f"restoring {name}'s {what} (the current ones are kept in vms/.kept)")
-                kept = _restore_offline(conn, hctx, name, src, log, lifecycle, os_src)
+                kept = _restore_offline(conn, hctx, name, src, log, lifecycle, os_src, state_src,
+                                        _probe(hooks, hctx, kit.spec_for(name)))
                 moved[name] = ", ".join(str(k) for k in kept)
     return moved
 
@@ -347,7 +371,8 @@ def _restore_secrets(user: UserContext, kit: str, tar_path: Path, stamp: str) ->
     return aside
 
 
-def _restore_offline(conn, hctx, name: str, src: Path, log, lifecycle, os_src: Path | None = None) -> list[Path]:
+def _restore_offline(conn, hctx, name: str, src: Path, log, lifecycle, os_src: Path | None = None,
+                     state_src: Path | None = None, probe=None) -> list[Path]:
     from hitkit.machine import disks
 
     found = lifecycle.get(conn, name, hctx.cfg.install_id)
@@ -357,8 +382,11 @@ def _restore_offline(conn, hctx, name: str, src: Path, log, lifecycle, os_src: P
     disks.expand_copy(src, hctx.paths(name).data_disk)
     if os_src is not None:
         disks.expand_copy(os_src, hctx.paths(name).os_disk)
+    if state_src is not None:  # NVRAM and TPM state, for a disk whose key is sealed to them
+        with tarfile.open(state_src) as tar:
+            tar.extractall(hctx.paths(name).root, filter="data")
     if was_running:
-        lifecycle.start(conn, hctx, name, log)
+        lifecycle.start(conn, hctx, name, log, probe)
     return kept
 
 

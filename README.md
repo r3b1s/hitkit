@@ -154,6 +154,24 @@ hitkit token create netbird --name my-agent --scope user   # a service user with
 Peers join with `netbird up --management-url https://netbird.hitkit.internal --setup-key <key>`
 and must trust the hitkit CA (`sudo hitkit trust install` on the host).
 
+### IncusOS
+
+```sh
+hitkit up incus-os                 # IncusOS appliance VM, virtio-scsi disk, swtpm, Secure Boot
+hitkit creds incus-os              # web UI URL, browser certificate bundle & password, recovery keys
+hitkit browser-cert incus-os       # import the web UI login certificate into Firefox and Chromium
+incus remote add hitkit-incus-os <token>  # using the trust token printed by up
+incus launch images:debian/trixie hitkit-incus-os:test
+hitkit token create incus-os --name laptop  # mint more trust tokens
+```
+
+IncusOS is an immutable appliance that updates itself in place and seals its disk encryption
+to the virtual TPM. It has no interactive shell or SSH daemon; interact with it using the
+`incus` CLI, `incus admin os` against the `hitkit-incus-os` remote, or via the Incus web UI
+at `https://incus-os.hitkit.internal:8443` after importing the browser certificate with
+`hitkit browser-cert incus-os` (no root; restart the browser). The server's certificate is
+self-signed, so each browser asks once to accept it: compare `server_fingerprint` from `hitkit creds`.
+
 ### Developing hitkit inside hitkit
 
 ```sh

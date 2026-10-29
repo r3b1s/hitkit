@@ -48,10 +48,16 @@ _INCLUDE = re.compile(r"^\s*Include=\.\./([\w-]+)\s*$", re.MULTILINE)
 _EXTRA_TREE = re.compile(r"^\s*ExtraTrees=\.\./([\w-]+)/", re.MULTILINE)
 
 
+def is_installer_role(role: str) -> bool:
+    return (IMAGES_DIR / role / "installer.toml").is_file()
+
+
 def role_dirs(role: str) -> list[Path]:
     """Directories whose content defines the role's image: shared pieces, the
     roles it includes (``Include=../<role>``), then the role itself."""
     role_dir = IMAGES_DIR / role
+    if is_installer_role(role):
+        return [role_dir]
     if role in (COMMON_DIR, "dev-common", "arch-common") or not (role_dir / "mkosi.conf").is_file():
         raise HitkitError(f"unknown image role {role!r}")
     dirs = [IMAGES_DIR / COMMON_DIR]
@@ -83,6 +89,11 @@ def pinned_artifacts(dirs: list[Path]) -> list[Artifact]:
         pins = d / "pins.toml"
         if pins.is_file():
             arts += [Artifact(**a) for a in tomllib.loads(pins.read_text()).get("artifact", [])]
+        installer = d / "installer.toml"
+        if installer.is_file():
+            raw = tomllib.loads(installer.read_text()).get("installer")
+            if raw:
+                arts.append(Artifact(name=raw["name"], version=str(raw["version"]), url=raw["url"], sha256=raw["sha256"], dest="", mode=0o644))
     return arts
 
 
@@ -131,6 +142,8 @@ def stage_artifacts(user: UserContext, arts: list[Artifact], dest: Path, log: Ca
 
 def distribution(role: str) -> str:
     """The Distribution= a role builds (its own or an included role's)."""
+    if is_installer_role(role):
+        return "installer"
     for d in reversed(role_dirs(role)):
         conf = d / "mkosi.conf"
         if conf.is_file():
@@ -239,7 +252,57 @@ def build(user: UserContext, role: str, log: Callable[[str], None] = lambda _m: 
         return image
 
 
+def _build_installer(user: UserContext, role: str, log: Callable[[str], None]) -> Image:
+    import gzip
+
+    dirs = role_dirs(role)
+    cfg_raw = tomllib.loads((dirs[0] / "installer.toml").read_text())["installer"]
+    packages = extra_packages(user, role)
+    image_hash = config_hash(dirs, packages)
+    image_id = f"{role}-{image_hash}"
+    dest_dir = images_dir(user)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    qcow2 = dest_dir / f"{image_id}.qcow2"
+
+    art = Artifact(
+        name=cfg_raw["name"],
+        version=str(cfg_raw["version"]),
+        url=cfg_raw["url"],
+        sha256=cfg_raw["sha256"],
+        dest="",
+        mode=0o644,
+    )
+    cached_pkg = fetch_artifact(user, art, log)
+    log(f"converting {art.name} {art.version} to {qcow2.name}")
+    tmp = qcow2.with_suffix(".qcow2.tmp")
+    raw_tmp = qcow2.with_suffix(".raw.tmp")
+    try:
+        if cached_pkg.name.endswith(".gz") or cfg_raw["url"].endswith(".gz"):
+            with gzip.open(cached_pkg, "rb") as gz_in, raw_tmp.open("wb") as raw_out:
+                shutil.copyfileobj(gz_in, raw_out)
+            disks.convert_to_qcow2(raw_tmp, tmp)
+        else:
+            disks.convert_to_qcow2(cached_pkg, tmp)
+    finally:
+        raw_tmp.unlink(missing_ok=True)
+    tmp.chmod(0o444)
+    tmp.replace(qcow2)
+
+    versions = {role: str(cfg_raw["version"])}
+    image = Image(role, image_hash, qcow2, versions)
+    summary = {
+        "role": role,
+        "hash": image_hash,
+        "built": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+        "versions": versions,
+    }
+    _summary_path(user, image_id).write_text(json.dumps(summary, indent=2))
+    return image
+
+
 def _build(user: UserContext, role: str, log: Callable[[str], None]) -> Image:
+    if is_installer_role(role):
+        return _build_installer(user, role, log)
     dirs = role_dirs(role)
     packages = extra_packages(user, role)
     image_hash = config_hash(dirs, packages)

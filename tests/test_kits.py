@@ -48,3 +48,23 @@ def test_parse_builds_machines_with_kit_identity():
 def test_parse_rejects_machine_name_that_is_not_an_address_slot():
     with pytest.raises(KeyError):
         kits.parse(DEVBOX_TOML.replace('name = "devbox"', 'name = "not-a-slot"'))
+
+
+def test_load_incus_os_kit():
+    from hitkit.addressing import slot
+
+    kit = kits.load("incus-os")
+    assert kit.name == "incus-os"
+    (m,) = kit.machines
+    assert m.name == "incus-os"
+    assert m.role == "incus-os"
+    assert m.cpus == 4
+    assert m.memory_mib == 8192
+    assert m.data_disk_gib == 150
+    assert m.stateful_os is True
+    assert m.ready_timeout == 600
+
+    s = slot("incus-os")
+    assert s.host_octet == 2
+    assert s.fqdn() == "incus-os.hitkit.internal"
+

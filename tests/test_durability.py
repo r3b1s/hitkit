@@ -35,7 +35,7 @@ class FakeDom:
         self.active = False
 
     def undefineFlags(self, flags):
-        self.undefined = True
+        self.undefined, self.undefine_flags = True, flags
 
 
 @pytest.fixture
@@ -318,3 +318,223 @@ def test_proxmox_and_ludus_are_stateful_and_wait_long_enough():
     assert kits.load("proxmox").machines[0].stateful_os
     ludus = kits.load("ludus").machines[0]
     assert ludus.stateful_os and ludus.ready_timeout >= 1800
+
+
+# --- installer machine sidecar durability (plan §4.5, §9) --------------------
+
+INCUS_SPEC = MachineSpec(
+    name="incus-os", role="incus-os", cpus=4, memory_mib=8192, data_disk_gib=150,
+    kit="incus-os", kit_version=1, stateful_os=True, ready_timeout=600,
+)
+
+
+def test_destroy_keeps_nvram_and_tpm_sidecar_for_installer_machine(ctx, no_domains):
+    paths = ctx.paths("incus-os")
+    paths.root.mkdir(parents=True)
+    paths.data_disk.write_text("zfs pool")
+    paths.nvram.write_text("nvram keys")
+    paths.tpm_dir.mkdir(parents=True)
+    (paths.tpm_dir / "tpm2-00.permall").write_text("sealed keys")
+
+    lifecycle.destroy(None, ctx, "incus-os")
+
+    kept_disk = ctx.vms_dir / ".kept" / "incus-os-data.qcow2"
+    sidecar = ctx.vms_dir / ".kept" / "incus-os-data.state"
+    assert kept_disk.read_text() == "zfs pool"
+    assert sidecar.is_dir()
+    assert (sidecar / "nvram.fd").read_text() == "nvram keys"
+    assert (sidecar / "tpm" / "tpm2-00.permall").read_text() == "sealed keys"
+    assert not paths.root.exists()
+
+
+def test_installer_machine_comes_back_with_its_own_nvram_and_tpm(ctx, create_fakes):
+    kept_disk = ctx.vms_dir / ".kept" / "incus-os-data.qcow2"
+    sidecar = ctx.vms_dir / ".kept" / "incus-os-data.state"
+    kept_disk.parent.mkdir(parents=True)
+    kept_disk.write_text("zfs pool")
+    sidecar.mkdir(parents=True)
+    (sidecar / "nvram.fd").write_text("nvram keys")
+    (sidecar / "tpm").mkdir(parents=True)
+    (sidecar / "tpm" / "tpm2-00.permall").write_text("sealed keys")
+
+    create_fakes.disk_gib = 150
+    lifecycle.create(create_fakes.conn, ctx, INCUS_SPEC, lambda m: None, {})
+
+    paths = ctx.paths("incus-os")
+    assert paths.data_disk.read_text() == "zfs pool"
+    assert paths.nvram.read_text() == "nvram keys"
+    assert (paths.tpm_dir / "tpm2-00.permall").read_text() == "sealed keys"
+    assert not sidecar.exists()
+
+
+def test_installer_backup_and_restore_copies_sidecar(ctx, monkeypatch, tmp_path):
+    from hitkit import backup
+
+    paths = ctx.paths("incus-os")
+    paths.root.mkdir(parents=True)
+    paths.data_disk.write_text("zfs pool")
+    paths.nvram.write_text("nvram keys")
+    paths.tpm_dir.mkdir(parents=True)
+    (paths.tpm_dir / "tpm2-00.permall").write_text("sealed keys")
+
+    dom = FakeDom("incus-os")
+    info = lifecycle.MachineInfo("incus-os", Ownership.OWNED, None, "running")
+    monkeypatch.setattr(lifecycle, "kit_machines", lambda conn, iid, kit: [info])
+    monkeypatch.setattr(lifecycle, "get", lambda conn, name, iid: (dom, info))
+    monkeypatch.setattr(lifecycle, "stop", lambda *a, **k: True)
+    monkeypatch.setattr(lifecycle, "start", lambda *a, **k: True)
+    monkeypatch.setattr(disks, "compressed_copy", lambda src, dest: dest.write_text(src.read_text()))
+    monkeypatch.setattr(disks, "expand_copy", lambda src, dest: dest.write_text(src.read_text()))
+
+    from hitkit.kits import Hooks
+    kit = SimpleNamespace(name="incus-os", spec_for=lambda n: INCUS_SPEC)
+    hooks = Hooks()
+
+    backup_dir = backup.create(None, ctx, kit, hooks, str(tmp_path / "backups"), keep=7, log=lambda m: None)
+
+    manifest = backup.verify(backup_dir)
+    assert "state_file" in manifest["machines"]["incus-os"]
+    assert (backup_dir / manifest["machines"]["incus-os"]["state_file"]["name"]).exists()
+
+    # Now restore into a fresh machine directory
+    paths.data_disk.write_text("current data to keep")
+    paths.nvram.write_text("current nvram")
+
+    backup.restore(None, ctx, kit, hooks, backup_dir, log=lambda m: None)
+
+    assert paths.data_disk.read_text() == "zfs pool"
+    assert paths.nvram.read_text() == "nvram keys"
+    assert (paths.tpm_dir / "tpm2-00.permall").read_text() == "sealed keys"
+
+
+
+def installer_dir(ctx, data="zfs pool"):
+    paths = ctx.paths("incus-os")
+    paths.root.mkdir(parents=True)
+    paths.data_disk.write_text(data)
+    paths.nvram.write_text("nvram keys")
+    paths.tpm_dir.mkdir()
+    (paths.tpm_dir / "tpm2-00.permall").write_text("sealed keys")
+    return paths
+
+
+def test_gc_deleting_a_kept_disk_also_deletes_its_tpm_state(ctx, no_domains):
+    installer_dir(ctx)
+    lifecycle.destroy(None, ctx, "incus-os")
+    [k] = lifecycle.kept_disks(ctx)
+
+    lifecycle.delete_kept_disk(k.path)
+
+    assert list((ctx.vms_dir / ".kept").iterdir()) == []  # the sidecar holds key material
+
+
+def test_only_machines_with_tpm_state_get_a_sidecar(ctx, no_domains):
+    paths = machine_dir(ctx)
+    paths.nvram.write_text("every UEFI machine has one")
+
+    lifecycle.destroy(None, ctx, "forgejo")
+
+    assert sorted(p.name for p in (ctx.vms_dir / ".kept").iterdir()) == ["forgejo-data.qcow2"]
+
+
+def test_destroy_keeping_data_tells_libvirt_to_keep_nvram_and_tpm(ctx, monkeypatch):
+    installer_dir(ctx)
+    dom = FakeDom("incus-os")
+    info = lifecycle.MachineInfo("incus-os", Ownership.OWNED, None, "running")
+    monkeypatch.setattr(lifecycle, "get", lambda conn, name, install_id: (dom, info))
+    monkeypatch.setattr(lifecycle, "stop", lambda conn, ctx, name, timeout=60: True)
+    lv = SimpleNamespace(VIR_DOMAIN_UNDEFINE_NVRAM=4, VIR_DOMAIN_UNDEFINE_KEEP_NVRAM=8,
+                         VIR_DOMAIN_UNDEFINE_KEEP_TPM=64, VIR_DOMAIN_UNDEFINE_MANAGED_SAVE=1, libvirtError=Exception)
+    monkeypatch.setattr(lifecycle, "_libvirt", lambda: lv)
+
+    lifecycle.destroy(None, ctx, "incus-os")
+
+    assert dom.undefine_flags == 8 | 64 | 1
+
+
+@pytest.fixture
+def installer_fakes(create_fakes, monkeypatch):
+    from hitkit.machine import seed as seed_disk
+
+    create_fakes.seeds = []
+    monkeypatch.setattr(seed_disk, "create_seed_image", lambda path, sections: path.write_text(str(sections)))
+
+    def seed():
+        create_fakes.seeds.append(1)
+        return {"install": {"version": "1"}}
+
+    create_fakes.seed = seed
+    return create_fakes
+
+
+def test_a_fresh_installer_machine_gets_install_media_and_its_seed(ctx, installer_fakes):
+    lifecycle._create(installer_fakes.conn, ctx, INCUS_SPEC, lambda m: None, {}, seed=installer_fakes.seed)
+
+    paths = ctx.paths("incus-os")
+    assert installer_fakes.seeds == [1]
+    assert paths.install_disk.read_text() == "overlay"
+    assert "install" in paths.seed_img.read_text()
+    assert paths.tpm_dir.is_dir()
+    assert not paths.os_disk.exists()  # the single disk is the data disk
+
+
+def test_an_installer_machine_from_a_kept_disk_is_not_reinstalled(ctx, installer_fakes, no_domains):
+    installer_dir(ctx)
+    lifecycle.destroy(None, ctx, "incus-os")
+    installer_fakes.disk_gib = 150
+
+    lifecycle._create(installer_fakes.conn, ctx, INCUS_SPEC, lambda m: None, {}, seed=installer_fakes.seed)
+
+    paths = ctx.paths("incus-os")
+    assert installer_fakes.seeds == []
+    assert not paths.install_disk.exists() and not paths.seed_img.exists()
+    assert (paths.tpm_dir / "tpm2-00.permall").read_text() == "sealed keys"
+
+
+def test_a_kept_installer_disk_without_tpm_state_warns_about_the_recovery_key(ctx, installer_fakes):
+    kept_disk = ctx.vms_dir / ".kept" / "incus-os-data.qcow2"
+    kept_disk.parent.mkdir(parents=True)
+    kept_disk.write_text("zfs pool")
+    installer_fakes.disk_gib = 150
+    messages = []
+
+    lifecycle._create(installer_fakes.conn, ctx, INCUS_SPEC, messages.append, {}, seed=installer_fakes.seed)
+
+    assert any("recovery key" in m for m in messages)
+
+
+def test_installer_machines_need_a_seed_and_probe_from_their_kit(ctx, monkeypatch):
+    monkeypatch.setattr(lifecycle, "get", lambda conn, name, install_id: None)
+    with pytest.raises(HitkitError, match="needs a seed and a readiness probe"):
+        lifecycle.up(None, ctx, INCUS_SPEC, lambda m: None)
+
+    meta = MachineMeta(install_id="mine", kit="incus-os", kit_version=1, machine="incus-os", role="incus-os",
+                       image="incus-os-h", address="10.77.0.2", created="now", versions={})
+    info = lifecycle.MachineInfo("incus-os", Ownership.OWNED, meta, "stopped")
+    monkeypatch.setattr(lifecycle, "get", lambda conn, name, install_id: (FakeDom("incus-os"), info))
+    with pytest.raises(HitkitError, match="needs a readiness probe"):
+        lifecycle.start(None, ctx, "incus-os", lambda m: None)
+
+
+def test_upgrade_refuses_an_installer_machine(ctx):
+    with pytest.raises(HitkitError, match="updates itself in place"):
+        lifecycle.upgrade(None, ctx, INCUS_SPEC, lambda m: None)
+
+
+def test_backups_of_machines_without_tpm_state_have_no_state_file(ctx, monkeypatch, tmp_path):
+    from hitkit import backup
+    from hitkit.kits import Hooks
+
+    machine_dir(ctx).nvram.write_text("every UEFI machine has one")
+    info = lifecycle.MachineInfo("forgejo", Ownership.OWNED, None, "stopped")
+    monkeypatch.setattr(lifecycle, "kit_machines", lambda conn, iid, kit: [info])
+    monkeypatch.setattr(lifecycle, "get", lambda conn, name, iid: (FakeDom(), info))
+    monkeypatch.setattr(lifecycle, "has_saved_state", lambda dom: False)
+    monkeypatch.setattr(lifecycle, "stop", lambda *a, **k: True)
+    monkeypatch.setattr(lifecycle, "start", lambda *a, **k: True)
+    monkeypatch.setattr(disks, "compressed_copy", lambda src, dest: dest.write_text(src.read_text()))
+    kit = SimpleNamespace(name="forge", spec_for=lambda n: SPEC)
+
+    backup_dir = backup.create(None, ctx, kit, Hooks(), str(tmp_path / "backups"), keep=7, log=lambda m: None)
+
+    assert "state_file" not in backup.verify(backup_dir)["machines"]["forgejo"]

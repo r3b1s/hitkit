@@ -63,6 +63,8 @@ def run_checks(user: UserContext, cfg: HostConfig | None) -> list[CheckResult]:
         ("ufw", check_ufw, ()),
         ("firewall-service", check_firewall_service, ()),
         ("build-tools", check_build_tools, ()),
+        ("swtpm", check_swtpm, ()),
+        ("secure-boot-ovmf", check_secure_boot_ovmf, ()),
         ("host-trust", check_host_trust, (user,)),
         ("install-id", check_install_id, (user, cfg)),
         ("session-daemon", check_session_daemon, ()),
@@ -296,6 +298,38 @@ def check_build_tools() -> CheckResult:
         return CheckResult("build-tools", "ok",
                            f"mkosi present; {'/'.join(tree)} images will use mkosi's tools tree (first build downloads it)")
     return CheckResult("build-tools", "ok", "image build tools are present")
+
+
+def check_swtpm() -> CheckResult:
+    name = "swtpm"
+    distro = hostinfo.detect()
+    if shutil.which("swtpm", path=hostinfo._SEARCH_PATH) is None:
+        return CheckResult(
+            name,
+            "warn",
+            "swtpm is not installed (needed only for the incus-os kit)",
+            hint=distro.host_packages,
+        )
+    if distro.family in ("debian", "fedora") and shutil.which("swtpm_setup", path=hostinfo._SEARCH_PATH) is None:
+        return CheckResult(
+            name,
+            "warn",
+            "swtpm-tools is not installed (needed only for the incus-os kit)",
+            hint=distro.host_packages,
+        )
+    return CheckResult(name, "ok", "swtpm is present")
+
+
+def check_secure_boot_ovmf() -> CheckResult:
+    name = "secure-boot-ovmf"
+    if hostinfo.secure_boot_ovmf_available():
+        return CheckResult(name, "ok", "secure-boot OVMF firmware descriptor is present")
+    return CheckResult(
+        name,
+        "warn",
+        "secure-boot OVMF firmware descriptor not found (needed only for the incus-os kit)",
+        hint=hostinfo.detect().host_packages,
+    )
 
 
 def check_host_trust(user: UserContext) -> CheckResult:
