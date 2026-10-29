@@ -122,6 +122,7 @@ class FakeIncus:
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self.server.handle_error = lambda *a: None  # clients that hang up on purpose (pin checks)
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
         ctx.load_cert_chain(tmp_path / "srv.crt", tmp_path / "srv.key")
         self.server.socket = ctx.wrap_socket(self.server.socket, server_side=True)
         self.port = self.server.server_port

@@ -53,6 +53,7 @@ class IncusClient:
                  timeout: float = 30.0):
         self.host, self.port, self.pin, self.timeout = host, port, pin, timeout
         self._ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        self._ctx.minimum_version = ssl.TLSVersion.TLSv1_2  # Python's default too; stated, not assumed
         self._ctx.check_hostname = False
         self._ctx.verify_mode = ssl.CERT_NONE  # verified by the pin, in _connect
         self._ctx.load_cert_chain(certfile=str(certfile), keyfile=str(keyfile))

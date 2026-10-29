@@ -9,6 +9,7 @@ test for a version bump.
 
 from __future__ import annotations
 
+import csv
 import json
 import os
 import re
@@ -190,7 +191,8 @@ def test_incus_os_token_becomes_a_remote_that_launches_a_container(tmp_path):
     try:
         assert {t["name"]: t["scopes"] for t in hitkit("token", "list", "incus-os")}[name] == ["pending token"]
         incus_cli(tmp_path, "remote", "add", "hitkit-incus-os", tok["token"])  # no fingerprint prompt
-        assert "https://incus-os.hitkit.internal:8443" in incus_cli(tmp_path, "remote", "list", "-f", "csv")
+        remotes = {row[0]: row[1] for row in csv.reader(incus_cli(tmp_path, "remote", "list", "-f", "csv").splitlines())}
+        assert remotes["hitkit-incus-os"] == "https://incus-os.hitkit.internal:8443"
         incus_cli(tmp_path, "launch", "images:alpine/3.22", f"hitkit-incus-os:{name}")
         try:
             assert incus_cli(tmp_path, "exec", f"hitkit-incus-os:{name}", "--", "cat", "/etc/alpine-release")
