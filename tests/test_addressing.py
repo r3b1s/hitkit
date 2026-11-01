@@ -80,3 +80,10 @@ def test_host_record_fqdns_end_with_domain():
     records = host_records(parse_subnet(DEFAULT))
     assert len(records) == len(SLOTS)
     assert all(fqdn.endswith(".hitkit.internal") for _, fqdn in records)
+
+
+def test_the_incus_cluster_slots_are_in_hitkits_own_range():
+    subnet = parse_subnet(DEFAULT)
+    assert str(slot_address(subnet, "incus-cluster-1")) == "10.77.0.3"
+    assert str(slot_address(subnet, "incus-cluster-3")) == "10.77.0.5"
+    assert str(slot_address(subnet, "operations-center")) == "10.77.0.6"  # a VM, but a name in DNS like any other

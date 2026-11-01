@@ -146,6 +146,25 @@ wire it in. TLS uses the hitkit CA.
 - Durability: NVRAM and TPM emulator state are kept in `<name>-data.state/` across `destroy`
   and restored on next `up`. Backups copy disk and state offline in `<name>.data.state.tar`.
 
+## incus-cluster
+
+- Machines `incus-cluster-1` to `-3` (`--nodes N`, 1 to 3, default 1): IncusOS on the `incus-os`
+  role, 6 vCPU, 12 GiB RAM, 200 GiB data disk. `stateful_os`, no shell, as for `incus-os`.
+- Operations Center (OC) forms and manages the cluster, and runs as the Incus VM
+  `operations-center` on `incus-cluster-1`. It is not a libvirt machine, so it is not in `status`.
+  Its web UI is `https://operations-center.hitkit.internal:8443`, with the same browser certificate.
+- `up` takes about 20 minutes, most of it the nested install and first boots.
+- Needs `sudo hitkit setup` once for the names `incus-cluster-N` and `operations-center`.
+- Incus remote: `hitkit-incus-cluster` at `https://incus-cluster-1.hitkit.internal:8443`.
+- `creds` keys: `url`, `ui`, `server_fingerprint`, `operations_center_url`, `remote_add` (while the
+  CLI token is pending), `ui_certificate`, `ui_certificate_password`, `ui_import`, `shell`, and
+  `<name>_encryption_key` and `<name>_pool_key` for each node and for `operations_center`.
+- Tokens: as for `incus-os`. OC's client certificate and the members' server certificates are
+  not listed and cannot be revoked.
+- Members can be added with a larger `--nodes`. Removing them is refused. A cluster whose setup
+  failed cannot be retried: `hitkit destroy incus-cluster --delete-data` starts over.
+- Updates run through OC, not on a node's own schedule.
+
 ## hitkit-dev, hitkit-dev-debian, hitkit-dev-fedora
 
 - Machines `dev` (Arch), `dev-debian` and `dev-fedora`. Each is for

@@ -111,8 +111,14 @@ INSTALL_PATTERNS = (
 )
 
 
+_CURSOR_CODE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
+
+
 def scan_installer(text: str) -> bool:
-    return any(p in text for p in INSTALL_PATTERNS)
+    """On a wide console the TUI repaints word by word, with cursor moves between the words
+    (docs/incus/operations-center.md §3), so match on the text without them."""
+    plain = " ".join(_CURSOR_CODE.sub(" ", text).split())
+    return any(p in plain for p in INSTALL_PATTERNS)
 
 
 def wait_installer(

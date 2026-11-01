@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from hitkit.machine.readiness import Failed, NotReady, Ready, scan, wait
+from hitkit.machine.readiness import Failed, NotReady, Ready, scan, scan_installer, wait
 
 
 class FakeClock:
@@ -108,3 +108,16 @@ def test_marker_glued_to_login_prompt_is_found():
 
 def test_ready_inside_other_words_is_not_a_marker():
     assert scan("NOT-HITKIT-READYISH\n") is None
+
+
+def test_scan_installer_reads_a_tui_that_repaints_word_by_word():
+    # A real line from an Incus VM's console: the words arrive between cursor moves.
+    console = "\x1b[8;10HIncusOS\x1b[8;18Hwas\x1b[8;22Hsuccessfully\x1b[8;35Hinstalled.\x1b[9;10HPlease"
+    assert "was successfully installed." not in console
+    assert scan_installer(console) is True
+
+
+def test_scan_installer_still_reads_a_plain_console_and_ignores_others():
+    assert scan_installer("IncusOS was successfully installed.\r\nPlease remove the install media") is True
+    assert scan_installer("install media detected, but the system is already installed") is True
+    assert scan_installer("IncusOS is starting...") is False

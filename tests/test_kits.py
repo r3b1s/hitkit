@@ -68,3 +68,24 @@ def test_load_incus_os_kit():
     assert s.host_octet == 2
     assert s.fqdn() == "incus-os.hitkit.internal"
 
+
+def test_load_incus_cluster_kit():
+    from hitkit.addressing import slot
+
+    kit = kits.load("incus-cluster")
+    assert kit.name == "incus-cluster"
+    assert kit.default_knobs() == {"nodes": 1}
+    (m,) = kit.machines
+    assert m.name == "incus-cluster-1"
+    assert m.role == "incus-os"  # the nodes install the same image as the incus-os kit
+    assert (m.cpus, m.memory_mib, m.data_disk_gib) == (6, 12288, 200)
+    assert m.stateful_os is True
+    assert [s.name for s in kit.expand({"nodes": 3})] == ["incus-cluster-1", "incus-cluster-2", "incus-cluster-3"]
+    assert slot("operations-center").host_octet == 6
+
+
+def test_incus_cluster_nodes_knob_is_bounded_by_its_slots():
+    kit = kits.load("incus-cluster")
+    assert kit.parse_knobs(["--nodes", "3"]) == {"nodes": 3}
+    with pytest.raises(HitkitError, match="between 1 and 3"):
+        kit.parse_knobs(["--nodes", "4"])

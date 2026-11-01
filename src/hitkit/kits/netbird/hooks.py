@@ -60,9 +60,10 @@ class NetBird:
         if self.token:
             req.add_header("Authorization", f"Token {self.token}")
         started = time.monotonic()
+        ctx = ssl.create_default_context(cafile=str(self.cafile))
+        ctx.minimum_version = ssl.TLSVersion.TLSv1_3
         try:
-            with urllib.request.urlopen(req, context=ssl.create_default_context(cafile=str(self.cafile)),
-                                        timeout=30) as resp:
+            with urllib.request.urlopen(req, context=ctx, timeout=30) as resp:
                 status, raw = resp.status, resp.read()
         except urllib.error.HTTPError as e:
             status, raw = e.code, e.read()
