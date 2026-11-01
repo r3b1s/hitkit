@@ -85,6 +85,7 @@ def test_no_auth_has_no_header():
 def test_tls_is_verified_against_the_given_ca(client):
     assert client._ctx.verify_mode == ssl.CERT_REQUIRED
     assert client._ctx.check_hostname
+    assert client._ctx.minimum_version == ssl.TLSVersion.TLSv1_3
 
 
 def test_with_auth_returns_clone_and_leaves_original_alone(client):

@@ -325,9 +325,10 @@ def test_incus_cluster_presents_a_hitkit_ca_certificate():
     hooks, hctx = _incus_cluster()
     assert secrets_pem(hctx, "cluster.leaf.crt") == secrets_pem(hctx, "incus-cluster-1.server.crt")
     ctx = ssl.create_default_context(cafile=str(hctx.user.ca_dir / "ca.crt"))
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_3
     ctx.check_hostname = False  # the address is an IP until `hitkit setup` has written the name
     with socket.create_connection(("10.77.0.3", 8443), timeout=10) as raw, ctx.wrap_socket(raw) as tls:
-        assert tls.version()
+        assert tls.version() == "TLSv1.3"
 
 
 def secrets_pem(hctx, name: str) -> str:

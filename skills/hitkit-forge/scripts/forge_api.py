@@ -58,8 +58,10 @@ def call(method: str, path: str, body=None):
     req.add_header("Accept", "application/json")
     if data is not None:
         req.add_header("Content-Type", "application/json")
+    ctx = ssl.create_default_context(cafile=_ca())
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_3
     try:
-        with urllib.request.urlopen(req, context=ssl.create_default_context(cafile=_ca()), timeout=60) as resp:
+        with urllib.request.urlopen(req, context=ctx, timeout=60) as resp:
             raw = resp.read().decode(errors="replace")
     except urllib.error.HTTPError as e:
         raise ApiError(e.code, e.read().decode(errors="replace")) from None

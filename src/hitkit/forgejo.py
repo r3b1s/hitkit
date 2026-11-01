@@ -51,6 +51,7 @@ class Forgejo:
         self.base = base_url.rstrip("/") + "/api/v1"
         self.auth = auth
         self._ctx = ssl.create_default_context(cafile=str(cafile))
+        self._ctx.minimum_version = ssl.TLSVersion.TLSv1_3
 
     def with_auth(self, auth: Auth) -> "Forgejo":
         clone = Forgejo.__new__(Forgejo)
