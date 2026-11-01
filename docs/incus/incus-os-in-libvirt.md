@@ -258,8 +258,10 @@ installed, please remove the media" path waits for the removal, then reboots.
 
 ## 10. Not tested
 
-- **Session-end save.** libvirt saves running session VMs when the session ends
-  and resumes them later (`auto_shutdown_try_save`). Not tried with a TPM.
+- **Session-end save, from a real session end.** libvirt saves running session VMs when the
+  session ends and resumes them later (`auto_shutdown_try_save`). `virsh managedsave` of a VM with
+  a TPM, and a nested VM running inside it, did work
+  ([operations-center.md](operations-center.md) §7); a real logout has not been tried.
 - **Other hosts.** Debian 13 and Fedora 44, whose libvirt and firmware file
   names differ: `<source type='dir'>` support and the secure-boot firmware
   descriptor need checking there.

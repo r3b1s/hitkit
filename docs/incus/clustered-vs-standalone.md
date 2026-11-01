@@ -80,14 +80,16 @@ What that costs:
 - **The `incus` CLI is unaffected.** It is verified through the fingerprint
   carried in the trust token.
 
-## 4. For a future clustered kit
+## 4. The clustered kit
 
-- The certificate swap in section 1 gives every member a hitkit-CA certificate.
-  It is cluster-wide, so do it once, before handing out tokens.
-- Test the two-step creation of pools and networks on two or more members, and
-  how `--target` and `?target=` appear in reads.
-- Joining members uses cluster join tokens (`POST /1.0/cluster/members`), not the
-  client trust tokens in
-  [incus-os-in-libvirt.md](incus-os-in-libvirt.md) section 8. Not tested.
-- IncusOS documents clustering in its tutorial `incus-cluster` (in the IncusOS
+The `incus-cluster` kit ([docs/plans/incus-cluster.md](../plans/incus-cluster.md)) does not
+cluster the nodes itself: Operations Center only manages clusters it formed, so it runs the
+clustering and the joins. The findings are in
+[operations-center.md](operations-center.md).
+
+- The certificate swap in section 1 gives every member a hitkit-CA certificate. It is
+  cluster-wide, so it happens once, through Operations Center, before tokens are handed out.
+- Joining servers must have no pools or networks, so the nodes install without Incus's defaults.
+  Operations Center's join hands them the member-specific pool settings.
+- IncusOS documents manual clustering in its tutorial `incus-cluster` (in the IncusOS
   docs, under tutorials).
