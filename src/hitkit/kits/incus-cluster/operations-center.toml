@@ -1,0 +1,8 @@
+# The IncusOS install ISO for the Operations Center VM, from
+# https://images.linuxcontainers.org/os/index.json (stable channel). The nodes install the same
+# release from images/incus-os/installer.toml: bump the two together.
+[iso]
+name = "IncusOS ISO"
+version = "202610272235"
+url = "https://images.linuxcontainers.org/os/202610272235/x86_64/IncusOS_202610272235.iso.gz"
+sha256 = "d00c404eb377d8e4791b16f198a4599ce25131035e6daffdad1791cd92e658e7"

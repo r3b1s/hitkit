@@ -156,6 +156,7 @@ flowchart LR
 - Forgejo allows migrations and mirrors to private networks (`ALLOW_LOCALNETWORKS`). Guests already have NAT egress to the LAN, so this grants nothing new.
 - `hitkit up forge` edits `~/.ssh/config`, inserting a marked `Include` block that `destroy` removes.
 - **Trust on first use for the `incus-os` server certificate.** IncusOS generates its own self-signed server certificate (`CN=root@<hostname>`) during initialization. Because standalone Incus servers cannot present an externally-signed hitkit-CA certificate without clustering, hitkit contacts the server over the host-only bridge immediately after installation and pins the certificate as `server.crt`. Every subsequent connection validates this pin.
+- **Trust on first use in the `incus-cluster` kit.** hitkit pins each node's self-signed certificate, and Operations Center's, the same way, over the host-only bridge. The window closes when the kit ends: Operations Center and the cluster then present hitkit-CA certificates, which hitkit pins.
 
 ## 6. Architecture
 
@@ -218,7 +219,9 @@ setup time. hitkit never needs root again to register a new VM.
 |---|---|---|
 | `.1` | `host.hitkit.internal` | Host side of `hitkit0`; dnsmasq |
 | `.2` | `incus-os.hitkit.internal` | `incus-os` kit |
-| `.3`–`.9` | — | Reserved |
+| `.3`–`.5` | `incus-cluster-N.hitkit.internal` | `incus-cluster` kit: cluster members |
+| `.6` | `operations-center.hitkit.internal` | `incus-cluster` kit: Operations Center, an Incus VM on the first member |
+| `.7`–`.9` | — | Reserved |
 | `.10` | `forgejo.hitkit.internal` | Forge |
 | `.20`–`.29` | `runner-N.hitkit.internal` | Persistent runners |
 | `.11` | `proxmox.hitkit.internal` | `proxmox` kit |
@@ -310,7 +313,7 @@ versions move only through deliberate, reviewed bumps to the pins.
 | Docker Engine | Docker's official apt repository (`docker-ce`), not Debian's older `docker.io` | Version in the mkosi profile; repository key pinned |
 | Renovate | Container image used by the scheduled workflow | Image tag + digest |
 | Job images (`ubuntu-latest`, …) | Container registry | Image tag + digest in the runner config |
-| IncusOS | `https://images.linuxcontainers.org/os/index.json` (stable channel) | Version + SHA-256 in `installer.toml` |
+| IncusOS | `https://images.linuxcontainers.org/os/index.json` (stable channel) | Version + SHA-256 in `installer.toml`, and in `kits/incus-cluster/operations-center.toml` for the ISO |
 
 - **Versions are recorded** in an image manifest beside the qcow2 and copied
   into domain metadata (§8.4). `hitkit status` therefore shows exactly what each
@@ -433,6 +436,7 @@ Kits are curated and shipped with hitkit. There is no external kit loading.
 | `proxmox` | `proxmox` (.11): 4 vCPU, 8 GiB, 100 GiB data | Proxmox VE 9 with API token (§13.4) |
 | `pbs` | `pbs` (.12): 2 vCPU, 4 GiB, 100 GiB data | Proxmox Backup Server 4 with a datastore and API token, optionally added to `proxmox` as backup storage (§13.16) |
 | `ludus` | `ludus` (.13): 8 vCPU, 32 GiB, 250 GiB data | Ludus 2.3.8 cyber ranges on Proxmox VE 9 (§13.14) |
+| `incus-cluster` | `incus-cluster-N` (.3–.5): 6 vCPU, 12 GiB, 200 GiB data | IncusOS cluster managed by Operations Center, which runs as a VM on the first member (.6) (§13.18) |
 
 ### 9.3 MVP kit: `forge`
 
@@ -1207,6 +1211,33 @@ dm-verity, and Secure Boot enrollment) and performs its own automated updates in
   browser certificate bundle (`browser.p12`) delivered via `hitkit creds incus-os`. IncusOS
   has no interactive shell or SSH daemon; management occurs entirely through `incus` CLI,
   `incus admin os`, or the Incus web UI.
+
+### 13.18 `incus-cluster` kit (`https://incus-cluster-1.hitkit.internal:8443`)
+
+An IncusOS cluster formed and managed by Operations Center (OC), with OC itself running as an
+Incus VM on the first member, not as a second libvirt machine. `--nodes` sets the member count,
+1 to 3. The findings behind the design are in `docs/incus/operations-center.md`; the plan is
+`docs/plans/incus-cluster.md`.
+
+- **OC forms the cluster.** OC only manages clusters it created, so hitkit never clusters the
+  nodes itself. The nodes install without Incus's defaults, because OC's OpenTofu run creates the
+  pools and networks and fails on ones that exist.
+- **OC bootstraps on the machine it then manages.** Its VM starts on a temporary `bootstrap` pool
+  on the first node, with `storage.logs_volume` pinned there, because Incus refuses to change that
+  key while an instance runs and OC cannot stop its own VM. Once the cluster exists the VM stops,
+  moves to `local`, and `bootstrap` is deleted; only then do other nodes join.
+- **A seed inside the pinned ISO.** An Incus VM takes one install medium more easily than two, so
+  `machine/seed.py` writes the seed into the image's empty seed slot. The customizer service
+  is not used: it is a network dependency and an unpinned image.
+- **Resumable.** `finish` reads the live state of the system at each step, so an interrupted
+  `up` continues. Tests cut it off at every change, before and after the change lands.
+- **Certificates.** OC and the cluster get hitkit-CA certificates. OC's comes before any node
+  registers, so nodes verify it through the hitkit CA from their seed and need no pin.
+- **State lives on the first node's disk.** The VM, its TPM state and OC's database are inside
+  node 1's `data.qcow2`, so `destroy`, `backup` and `restore` cover them. OC is not a libvirt
+  machine and does not appear in `hitkit status`. `hitkit creds` lists it.
+- **Not supported:** removing members, and reinstalling one member while keeping another's disk.
+  `hitkit destroy incus-cluster --delete-data` is the reset.
 
 ## 14. Prior art and borrowed ideas
 

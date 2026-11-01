@@ -172,6 +172,23 @@ at `https://incus-os.hitkit.internal:8443` after importing the browser certifica
 `hitkit browser-cert incus-os` (no root; restart the browser). The server's certificate is
 self-signed, so each browser asks once to accept it: compare `server_fingerprint` from `hitkit creds`.
 
+### IncusOS cluster with Operations Center
+
+```sh
+sudo hitkit setup                  # once, for the new names
+hitkit up incus-cluster            # about 20 minutes; --nodes 3 for three members
+hitkit creds incus-cluster         # cluster and Operations Center URLs, recovery keys
+hitkit browser-cert incus-cluster  # the same login works for both web UIs
+incus remote add hitkit-incus-cluster <token>  # using the trust token printed by up
+incus launch images:debian/trixie hitkit-incus-cluster:test
+```
+
+[Operations Center](https://github.com/FuturFusion/operations-center) forms and manages the
+cluster, and runs as an Incus VM on its first member, so it needs no machine of its own. It has
+a hitkit-CA certificate, as does the cluster, so browsers do not warn. Each node takes 12 GiB of
+RAM. Members can be added with a larger `--nodes`, but not removed; `hitkit destroy incus-cluster
+--delete-data` starts over.
+
 ### Developing hitkit inside hitkit
 
 ```sh

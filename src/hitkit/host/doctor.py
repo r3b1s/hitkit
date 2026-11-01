@@ -307,14 +307,14 @@ def check_swtpm() -> CheckResult:
         return CheckResult(
             name,
             "warn",
-            "swtpm is not installed (needed only for the incus-os kit)",
+            "swtpm is not installed (needed only for the incus-os and incus-cluster kits)",
             hint=distro.host_packages,
         )
     if distro.family in ("debian", "fedora") and shutil.which("swtpm_setup", path=hostinfo._SEARCH_PATH) is None:
         return CheckResult(
             name,
             "warn",
-            "swtpm-tools is not installed (needed only for the incus-os kit)",
+            "swtpm-tools is not installed (needed only for the incus-os and incus-cluster kits)",
             hint=distro.host_packages,
         )
     return CheckResult(name, "ok", "swtpm is present")
@@ -327,7 +327,7 @@ def check_secure_boot_ovmf() -> CheckResult:
     return CheckResult(
         name,
         "warn",
-        "secure-boot OVMF firmware descriptor not found (needed only for the incus-os kit)",
+        "secure-boot OVMF firmware descriptor not found (needed only for the incus-os and incus-cluster kits)",
         hint=hostinfo.detect().host_packages,
     )
 

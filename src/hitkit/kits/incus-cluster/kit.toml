@@ -1,0 +1,22 @@
+# An IncusOS cluster that Operations Center forms and manages, with Operations Center itself
+# running as an Incus VM on the first node (docs/plans/incus-cluster.md).
+name = "incus-cluster"
+description = "IncusOS cluster managed by Operations Center, which runs as a VM on https://operations-center.hitkit.internal:8443"
+version = 1
+
+[knobs.nodes]
+type = "int"
+default = 1
+min = 1
+max = 3
+help = "Cluster members; Operations Center runs on the first"
+
+[[machine]]
+name = "incus-cluster"
+role = "incus-os"
+count_knob = "nodes"
+cpus = 6
+memory_mib = 12288   # 4 GiB for IncusOS, 4 GiB for the Operations Center VM, and headroom
+data_disk_gib = 200  # the whole disk; the Operations Center VM's root takes 50 GiB of the pool
+stateful_os = true
+ready_timeout = 600  # install plus two reboots took 1m40s in the spike

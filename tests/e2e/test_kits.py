@@ -14,6 +14,8 @@ import json
 import os
 import re
 import shutil
+import socket
+import ssl
 import subprocess
 import time
 import tomllib
@@ -262,3 +264,117 @@ def test_incus_os_disk_grows_into_the_pool_after_a_reboot():
     subprocess.run(HITKIT + ["down", "incus-os"], check=True, capture_output=True)
     subprocess.run(HITKIT + ["up", "incus-os"], check=True, capture_output=True)
     assert _pool_gib(incus_os_api()) > before + 9
+
+
+# --- incus-cluster --------------------------------------------------------------
+# The kit takes about 20 minutes to come up. The disruptive tests reboot the first node and
+# destroy the kit, keeping its disks; they also run with HITKIT_E2E_DISRUPTIVE=1.
+
+
+def _incus_cluster():
+    from hitkit import kits
+    from hitkit.cli import _host_context
+
+    return kits.hooks("incus-cluster"), _host_context()
+
+
+def incus_cluster_api():
+    hooks, hctx = _incus_cluster()
+    return hooks.api_client(hctx)
+
+
+def operations_center_api():
+    hooks, hctx = _incus_cluster()
+    return hooks._oc(hctx)
+
+
+def test_incus_cluster_is_formed_and_managed_by_operations_center():
+    require_kit("incus-cluster")
+    oc = operations_center_api()
+    cluster = oc.get("/1.0/provisioning/clusters/incus-cluster")
+    assert cluster["status"] == "ready"
+    assert oc.provisioned("incus-cluster")  # its OpenTofu run finished
+    assert oc.server("incus-cluster-1.hitkit.internal")["cluster"] == "incus-cluster"
+    assert oc.get("/1.0/system/certificate")["dns_names"] == ["operations-center.hitkit.internal"]
+
+
+def test_operations_center_runs_on_the_cluster_with_its_vm_on_local():
+    require_kit("incus-cluster")
+    api = incus_cluster_api()
+    vm = api.instance("operations-center")
+    assert vm["status"] == "Running"
+    assert vm["devices"]["root"]["pool"] == "local"
+    assert "boot-media" not in vm["devices"]
+    assert vm["config"]["boot.autostart"] == "true"
+    assert api.get("/1.0/storage-pools") == ["/1.0/storage-pools/local"]  # no bootstrap pool left
+    target = "incus-cluster-1.hitkit.internal"
+    assert api.get(f"/1.0?target={target}")["config"]["storage.logs_volume"] == "local/logs"
+
+
+def test_operations_center_runs_the_pinned_version_fully_trusted():
+    require_kit("incus-cluster")
+    pinned = tomllib.loads((IMAGES.parent / "kits/incus-cluster/operations-center.toml").read_text())["iso"]["version"]
+    oc = operations_center_api()
+    assert oc.get("/os/1.0/system/security")["state"]["system_state_is_trusted"] is True
+    # OC updates what it manages, so it may run a newer release than it was installed with.
+    assert oc.server("operations-center")["version_data"]["os"]["version"] >= pinned
+
+
+def test_incus_cluster_presents_a_hitkit_ca_certificate():
+    require_kit("incus-cluster")
+    hooks, hctx = _incus_cluster()
+    assert secrets_pem(hctx, "cluster.leaf.crt") == secrets_pem(hctx, "incus-cluster-1.server.crt")
+    ctx = ssl.create_default_context(cafile=str(hctx.user.ca_dir / "ca.crt"))
+    ctx.check_hostname = False  # the address is an IP until `hitkit setup` has written the name
+    with socket.create_connection(("10.77.0.3", 8443), timeout=10) as raw, ctx.wrap_socket(raw) as tls:
+        assert tls.version()
+
+
+def secrets_pem(hctx, name: str) -> str:
+    from hitkit import secrets
+
+    return secrets.get(hctx.user, "incus-cluster", name)
+
+
+def test_incus_cluster_launches_an_instance():
+    require_kit("incus-cluster")
+    api = incus_cluster_api()
+    name = f"e2e-{int(time.time())}"
+    source = {"type": "image", "alias": "alpine/3.22", "mode": "pull", "protocol": "simplestreams",
+              "server": "https://images.linuxcontainers.org"}
+    api.wait(api.post("/1.0/instances", {"name": name, "type": "container", "source": source, "profiles": ["default"]}))
+    try:
+        api.set_state(name, "start")
+        assert api.instance(name)["status"] == "Running"
+    finally:
+        api.set_state(name, "stop", force=True)
+        api.wait(api.delete(f"/1.0/instances/{name}"))
+
+
+@disruptive
+def test_operations_center_comes_back_by_itself_after_its_node_reboots():
+    require_kit("incus-cluster")
+    api = incus_cluster_api()
+    api.post("/os/1.0/system/:reboot", {})
+    time.sleep(30)
+    deadline = time.monotonic() + 900
+    while time.monotonic() < deadline:
+        try:
+            if operations_center_api().authenticated():
+                break
+        except Exception:
+            pass
+        time.sleep(10)
+    else:
+        pytest.fail("Operations Center did not come back after a reboot")
+    assert operations_center_api().get("/os/1.0/system/security")["state"]["system_state_is_trusted"] is True
+
+
+@disruptive
+def test_incus_cluster_comes_back_from_its_kept_disks_without_a_recovery_key():
+    require_kit("incus-cluster")
+    subprocess.run(HITKIT + ["destroy", "incus-cluster", "--yes"], check=True, capture_output=True)
+    subprocess.run(HITKIT + ["up", "incus-cluster"], check=True, capture_output=True, timeout=1800)
+    oc = operations_center_api()
+    assert oc.cluster("incus-cluster")["status"] == "ready"
+    assert oc.server("incus-cluster-1.hitkit.internal")["server_status"] == "ready"

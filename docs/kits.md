@@ -129,9 +129,9 @@ The slot fixes the static address (`10.77.0.<octet>` on the default subnet), the
 name `<name>.hitkit.internal`, and the MAC address.
 
 Pick an unused octet below `30`: hitkit's own addresses are `.1`-`.29`. In use: `1`
-host, `2` incus-os, `10` forgejo, `11` proxmox, `12` pbs, `13` ludus, `14` devbox, `15` dev, `16`
+host, `2` incus-os, `3`-`5` incus-cluster-1 to incus-cluster-3, `6` operations-center, `10` forgejo, `11` proxmox, `12` pbs, `13` ludus, `14` devbox, `15` dev, `16`
 dev-debian, `17` dev-fedora, `18` cache, `19` netbird, `20`-`29` runner-1 to runner-10.
-Octets `3`-`9` are free for new kits. The rest of the subnet is not hitkit's:
+Octets `7`-`9` are free for new kits. The rest of the subnet is not hitkit's:
 `30`-`99` are static addresses for your own guests, `100`-`199` the DHCP pool, and
 `200`-`254` the overflow that holds the job pool's ci-1 to ci-55 (`docs/design.md`
 section 7.2).
