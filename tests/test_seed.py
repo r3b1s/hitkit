@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import gzip
+import io
 import json
 import shutil
 import subprocess
+import tarfile
 
 import pytest
 
-from hitkit.machine.seed import LABEL, create_seed_image
+from hitkit.errors import HitkitError
+from hitkit.machine import seed as seed_module
+from hitkit.machine.seed import LABEL, create_seed_image, seed_tar, seeded_iso
 
 pytestmark = pytest.mark.skipif(not (shutil.which("mkfs.fat") and shutil.which("mtype")),
                                 reason="needs dosfstools and mtools")
@@ -40,3 +45,35 @@ def test_rebuilding_replaces_the_previous_seed(tmp_path):
     create_seed_image(seed, {"install": {"version": "1"}})
     create_seed_image(seed, {"network": {"version": "1"}})
     assert _mtools("mdir", "-b", "-i", str(seed), "::/").split() == ["::/network.json"]
+
+
+def test_the_seed_tar_holds_one_json_file_per_section():
+    sections = {"install": {"version": "1"}, "operations-center": {"version": "1", "preseed": None}}
+    with tarfile.open(fileobj=io.BytesIO(seed_tar(sections))) as tar:
+        assert tar.getnames() == ["install.json", "operations-center.json"]
+        assert json.load(tar.extractfile("operations-center.json")) == sections["operations-center"]
+
+
+def _gzipped(tmp_path, content: bytes):
+    src = tmp_path / "image.iso.gz"
+    src.write_bytes(gzip.compress(content))
+    return src
+
+
+def test_seeded_iso_writes_the_seed_into_the_empty_slot_and_leaves_the_rest(tmp_path, monkeypatch):
+    monkeypatch.setattr(seed_module, "IMAGE_SEED_OFFSET", 4096)
+    image = b"\xaa" * 4096 + bytes(16384) + b"\xbb" * 4096
+    dest = tmp_path / "seeded.iso"
+    seeded_iso(_gzipped(tmp_path, image), dest, {"install": {"version": "1"}})
+    out = dest.read_bytes()
+    assert len(out) == len(image)
+    assert out[:4096] == image[:4096] and out[-4096:] == image[-4096:]
+    with tarfile.open(fileobj=io.BytesIO(out[4096:])) as tar:
+        assert tar.getnames() == ["install.json"]
+
+
+@pytest.mark.parametrize("image", [b"\xaa" * 40000, bytes(5000)], ids=["slot-in-use", "image-too-short"])
+def test_seeded_iso_refuses_an_image_whose_layout_changed(tmp_path, monkeypatch, image):
+    monkeypatch.setattr(seed_module, "IMAGE_SEED_OFFSET", 4096)
+    with pytest.raises(HitkitError, match="no empty seed slot"):
+        seeded_iso(_gzipped(tmp_path, image), tmp_path / "seeded.iso", {"install": {"version": "1"}})
